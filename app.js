@@ -73,7 +73,11 @@ function extractSlots(n){
   else if(/\b(nature|tea|relax|peace|peaceful|river|scenic|chill|prakriti|prokriti|shanti|chaa|chai bagan|chai bagaan|cha bagan)\b|प्रकृति|शांति|প্রকৃতি|চা/.test(n))g.interest='Nature';
   else if(/\b(offbeat|adventure|trek|trekking|village|explore|bhutan|gaon|gram)\b|गांव|रोमांच|গ্রাম/.test(n))g.interest='Offbeat';
   const mi=MRX.findIndex((r,i)=>r.test(n)&&(i!==4||S.awaiting==='month'));
+  /* month names in Devanagari and Bangla script (what speech recognition returns) */
+  const MS=[['जनवरी','জানুয়ারি'],['फरवरी','ফেব্রুয়ারি'],['मार्च','মার্চ'],['अप्रैल','এপ্রিল'],['मई','মে'],['जून','জুন'],['जुलाई','জুলাই'],['अगस्त','আগস্ট'],['सितंबर','सितम्बर','সেপ্টেম্বর'],['अक्टूबर','অক্টোবর'],['नवंबर','नवम्बर','নভেম্বর'],['दिसंबर','दिसम्बर','ডিসেম্বর']];
+  const si=MS.findIndex((a,i)=>a.some(w=>n.includes(w))&&(i!==4||S.awaiting==='month'));
   if(mi>=0)g.month=MFULL[mi];
+  else if(si>=0)g.month=MFULL[si];
   else if(/\b(winter|sardi|sheet)\b/.test(n))g.month='December';
   else if(/\b(summer|garmi|grishmo)\b/.test(n))g.month='May';
   else if(S.awaiting==='month'&&/\b(monsoon|barish|baarish|borsha|rain|rainy)\b/.test(n))g.month='July';
@@ -98,7 +102,18 @@ function addCard(html){const d=document.createElement('div');d.className='msg in
 function clearChips(){chat.querySelectorAll('.chips').forEach(e=>e.remove())}
 function markRead(){chat.querySelectorAll('.msg.out:not(.read)').forEach(m=>m.classList.add('read'))}
 async function typing(ms){markRead();const ty=document.createElement('div');ty.className='typing';ty.setAttribute('aria-label','typing');ty.innerHTML='<i></i><i></i><i></i>';chat.appendChild(ty);scrollDown();await sleep(ms);ty.remove()}
-async function say(lines,chipList){for(const t of [].concat(lines)){if(!t)continue;await typing(450+Math.min(800,t.length*5));addMsg(t,'in')}chips(chipList)}
+/* long replies are split into short WhatsApp-style bubbles (about 150 characters each) */
+function splitBubbles(t,max=150){
+  if(t.length<=max)return[t];
+  const sent=t.match(/[^.!?]+[.!?]*(?:\s+|$)/g)||[t],out=[];let cur='';
+  for(const s of sent){if(cur&&(cur+s).length>max){out.push(cur.trim());cur=s}else cur+=s}
+  if(cur.trim())out.push(cur.trim());
+  return out;
+}
+async function say(lines,chipList){
+  for(const t of [].concat(lines)){if(!t)continue;
+    for(const part of splitBubbles(t)){await typing(320+Math.min(650,part.length*4));addMsg(part,'in')}}
+  chips(chipList)}
 function chips(list){if(!list||!list.length)return;const c=document.createElement('div');c.className='chips';
   list.forEach(o=>{const b=document.createElement('button');b.className='chip';b.type='button';b.textContent=o.label;b.onclick=()=>send(o.label,o);c.appendChild(b)});chat.appendChild(c);scrollDown()}
 
@@ -129,12 +144,13 @@ function renderKb(){
   $('#p-kb').innerHTML=`<div class="stat"><div><b>${INTENTS.length}</b><small>question types</small></div><div><b>3</b><small>languages</small></div><div><b>${KB.length}</b><small>sourced facts</small></div></div>
   <p class="empty">Customers can write in English, Banglish (Roman Bengali), Hinglish (Roman Hindi), or Bangla and Hindi script. The bot answers in the same language. Curated answers come first; the sourced fact base (from the research dossier) backs up English questions. Sources appear here, never in the chat.</p>`;
 }
-function setLang(l){if(!l||l===S.lang&&$('#langPill').dataset.l===l)return;S.lang=l;const p=$('#langPill');p.dataset.l=l;p.textContent=LANGNAME[l]}
+function setLang(l){if(!l||l===S.lang&&$('#langPill').dataset.l===l)return;S.lang=l;const p=$('#langPill');p.dataset.l=l;p.textContent=LANGNAME[l];if(typeof updateVlang==='function')updateVlang()}
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.setAttribute('aria-selected',x===b));document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='p-'+b.dataset.tab))});
 $('#sheetBtn').onclick=()=>document.body.classList.toggle('sheet');
 $('#menuBtn').onclick=()=>{const m=$('#menu');const o=!m.classList.contains('open');m.classList.toggle('open',o);$('#menuBtn').setAttribute('aria-expanded',o)};
 document.addEventListener('click',e=>{if(!e.target.closest('#menu,#menuBtn'))$('#menu').classList.remove('open')});
-$('#menu').onclick=e=>{const a=e.target.dataset.act;if(!a)return;$('#menu').classList.remove('open');send(a==='restart'?'start over':a==='plan'?CHIPL.plan[LI[S.lang]]:CHIPL.human[LI[S.lang]],a==='restart'?{reset:true}:{intent:a})};
+$('#menu').onclick=e=>{const dm=e.target.dataset.demo;if(dm){$('#menu').classList.remove('open');return playDemo(dm)}
+  const a=e.target.dataset.act;if(!a)return;$('#menu').classList.remove('open');if(a==='feedback')return sendFeedback();send(a==='restart'?'start over':a==='plan'?CHIPL.plan[LI[S.lang]]:CHIPL.human[LI[S.lang]],a==='restart'?{reset:true}:{intent:a})};
 
 /* =====================================================================
    6. PLANNER (questions, itinerary) in 3 languages
@@ -277,7 +293,9 @@ async function runIntent(it,raw,score,viaChip){
   }
   if(it.act==='no'){S.offer=null}
   if(it.act==='lead'){await say(it.r[S.lang]);return startLead()}
-  await say(it.r[S.lang],(it.next||[]).slice(0,4).map(C));
+  await say(it.r[S.lang]);
+  if(!NOFB.has(it.id))addFb(raw,it.id);
+  chips((it.next||[]).slice(0,4).map(C));
   if(it.act==='offerlead')S.offer='lead';
   else if(it.act==='budgetdown')S.offer='budgetdown';
   else if(OFFER[it.id])S.offer=OFFER[it.id];
@@ -339,8 +357,10 @@ async function reply(raw,data={}){
   if(S.lang==='en'){const r=retrieve(raw);
     if(r){trace(raw,'fallback: fact base',[],'chunk '+r.c.id+' · '+r.c.ctx+' · '+(r.c.src[0]?r.c.src[0].l+' '+r.c.src[0].u:''));
       const warn=['conflict','unverified','old','operator'].includes(r.c.kind);
-      return say([`Here's what I know about ${r.c.ctx.replace(/\s*\([^)]*\)/,'')}:`,shortText(r.c.text)+(warn?" (Details can differ, so I'd confirm before you rely on it.)":'')],[C('plan'),C('human')])}}
+      await say([`Here's what I know about ${r.c.ctx.replace(/\s*\([^)]*\)/,'')}:`,shortText(r.c.text)+(warn?" (Details can differ, so I'd confirm before you rely on it.)":'')]);
+      addFb(raw,'fact-base');return chips([C('plan'),C('human')])}}
   trace(raw,'fallback: no confident match',['honest fallback','handoff offered']);
+  (S.unans=S.unans||[]).push(raw);renderFb();
   return say(UNKNOWN[LI[S.lang]],[C('plan'),C('human')]);
 }
 
@@ -356,11 +376,93 @@ async function welcome(){
 }
 let busy=false;
 async function send(text,data){
-  text=(text||'').trim();if(!text||busy)return;busy=true;clearChips();addMsg(text,'out');inp.value='';
+  text=(text||'').trim();if(!text||busy)return;busy=true;clearChips();addMsg(text,'out');inp.value='';if(typeof vmsg==='function')vmsg('');
   document.body.classList.remove('sheet');
   try{await reply(text,data||{})}catch(e){console.error(e);addMsg('Something went wrong. Please try again.','in')}
   busy=false;inp.focus();
 }
 $('#form').addEventListener('submit',e=>{e.preventDefault();send(inp.value)});
-renderSlots();renderLeads();renderKb();renderTrace();
+/* =====================================================================
+   10. FEEDBACK (thumbs up/down, what the bot could not answer)
+   ===================================================================== */
+const NOFB=new Set(['greet','thanks','bye','wow','ok','yes','nope','later','confused','identity','plan','booking','human','emergency','scope']);
+S.fb=[];S.unans=[];
+const FB_T={ask:['Helpful?','Kaam ka laga?','Kaajer laglo?'],sorry:['Sorry! What was wrong?','Maaf kijiye! Kya galat tha?','Dukkhito! Ki bhul chhilo?'],thx:['Thanks for telling us','Bataane ka shukriya','Jaanaar jonno dhonnobad']};
+const FB_R=[['wrong',['Wrong info','Galat jaankari','Bhul tothyo']],['misread',["Didn't get me",'Samajh nahi paya','Bujhte parenni']],['long',['Too long','Bahut lamba','Boro beshi']]];
+function addFb(q,id){
+  const li=LI[S.lang],row=document.createElement('div');row.className='fbrow';
+  row.innerHTML=`<span>${FB_T.ask[li]}</span><button data-v="up" aria-label="Helpful">👍</button><button data-v="down" aria-label="Not helpful">👎</button>`;
+  row.onclick=e=>{const v=e.target.closest('button')?.dataset.v;if(!v)return;
+    if(v==='up'){S.fb.push({q,id,v:1,lang:S.lang});row.innerHTML='<span>🙏</span>';renderFb();return}
+    row.innerHTML=`<span>${FB_T.sorry[li]}</span>`+FB_R.map(([c,l])=>`<button data-r="${c}">${esc(l[li])}</button>`).join('');
+    row.onclick=ev=>{const r=ev.target.closest('button')?.dataset.r;if(!r)return;S.fb.push({q,id,v:-1,r,lang:S.lang});row.innerHTML=`<span>🙏 ${FB_T.thx[li]}</span>`;renderFb()};
+  };
+  chat.appendChild(row);scrollDown();
+}
+function feedbackText(){
+  const up=S.fb.filter(f=>f.v>0).length,dn=S.fb.filter(f=>f.v<0);
+  let t=`Dooars demo feedback\n👍 ${up}   👎 ${dn.length}\n`;
+  if(dn.length)t+='\nNot helpful:\n'+dn.map(f=>`- "${f.q}" (${f.r}, ${LANGNAME[f.lang]})`).join('\n')+'\n';
+  if(S.unans.length)t+='\nBot could not answer:\n'+S.unans.map(q=>`- "${q}"`).join('\n')+'\n';
+  return t+'\nMy comment: ';
+}
+function sendFeedback(){window.open('https://wa.me/?text='+encodeURIComponent(feedbackText()),'_blank','noopener')}
+function renderFb(){
+  const up=S.fb.filter(f=>f.v>0).length,dn=S.fb.filter(f=>f.v<0);
+  $('#p-fb').innerHTML=`<div class="fbstat"><div><b>${up}</b><small>👍 helpful</small></div><div><b>${dn.length}</b><small>👎 not helpful</small></div><div><b>${S.unans.length}</b><small>unanswered</small></div></div>
+   ${dn.length?'<div class="fblist"><b>Not helpful</b><ul>'+dn.map(f=>`<li>“${esc(f.q.slice(0,50))}” · ${esc(f.r)}</li>`).join('')+'</ul></div>':''}
+   ${S.unans.length?'<div class="fblist"><b>Could not answer</b><ul>'+S.unans.map(q=>`<li>“${esc(q.slice(0,60))}”</li>`).join('')+'</ul></div>':''}
+   ${!S.fb.length&&!S.unans.length?'<div class="empty">Tap 👍 or 👎 under answers. Anything the bot could not answer shows up here.</div>':''}
+   <div class="btns"><button onclick="sendFeedback()">Send via WhatsApp</button><button onclick="navigator.clipboard&&navigator.clipboard.writeText(feedbackText())">Copy</button></div>`;
+}
+
+/* =====================================================================
+   11. VOICE INPUT (browser speech recognition; text is shown for checking before sending)
+   ===================================================================== */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+const mic=$('#mic'),vlang=$('#vlang'),vhint=$('#vhint');
+const VLC={en:'en-IN',bn:'bn-IN',hi:'hi-IN'},VLL={en:'EN',bn:'বাং',hi:'हिं'};
+let vsel='en',vManual=false,rec=null,listening=false,vNoted=false;
+function updateVlang(){if(!vManual)vsel=S.lang;vlang.textContent=VLL[vsel]}
+function vmsg(h){vhint.hidden=!h;vhint.innerHTML=h||''}
+const VERR={'not-allowed':'The microphone is blocked. Allow it in your browser settings, or type instead.','service-not-allowed':'Voice is not allowed on this device. Please type instead.',
+  'no-speech':'I did not hear anything. Tap the mic and try again.','audio-capture':'No microphone found.','network':'Voice needs an internet connection.','language-not-supported':'This language is not supported for voice on your device.'};
+function startVoice(){
+  if(busy)return;
+  try{rec=new SR()}catch(e){return vmsg('Voice is not available in this browser. Please type instead.')}
+  rec.lang=VLC[vsel];rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;
+  rec.onstart=()=>{listening=true;mic.classList.add('on');inp.value='';
+    vmsg('🎤 Listening in <b>'+({en:'English',bn:'Bangla',hi:'Hindi'})[vsel]+'</b>… speak now'+(vNoted?'':'<br><small>Voice is converted by your browser’s speech service (Chrome uses Google).</small>'));vNoted=true};
+  rec.onresult=e=>{let t='';for(const r of e.results)t+=r[0].transcript;inp.value=t};
+  rec.onerror=e=>vmsg(VERR[e.error]||('Voice stopped ('+e.error+'). Please type instead.'));
+  rec.onend=()=>{listening=false;mic.classList.remove('on');
+    if(inp.value.trim()){vmsg('Heard: <b>“'+esc(inp.value.trim())+'”</b> · fix it if needed, then tap send ➤');inp.focus()}
+    else if(/^🎤/.test(vhint.textContent))vmsg('')};
+  try{rec.start()}catch(e){}
+}
+if(!SR){mic.hidden=true;vlang.hidden=true}
+else{mic.onclick=()=>{listening?rec.stop():startVoice()};vlang.onclick=()=>{vManual=true;vsel=({en:'bn',bn:'hi',hi:'en'})[vsel];updateVlang()}}
+
+/* =====================================================================
+   12. PLAY-DEMO (a scripted chat that runs through the real engine)
+   ===================================================================== */
+const DEMOS={
+  bn:['Nomoskar','amra 3 jon bondhu, 4 diner plan chai','jongol ar safari','December','majhari budget','dam onek beshi','ota ki safe?','vote kake dibo?','dhonnobad, pore bolbo'],
+  hi:['namaste','mujhe family ke saath 3 din ghoomna hai','jungle safari','November','comfort','safari ka kitna lagega','bahut mehenga hai','thoda kam karo na','theek hai sochke bataunga'],
+  en:['hello','plan a 4 day trip for a couple','nature','March','comfort','will we see rhinos?','is it safe for solo girls','who will win the election','thanks']
+};
+let demoId=0;
+async function typeInto(t){for(let i=1;i<=t.length;i++){inp.value=t.slice(0,i);await sleep(28)}await sleep(350)}
+async function playDemo(k){
+  const id=++demoId;while(busy)await sleep(100);
+  document.body.classList.add('demo');
+  const bar=document.createElement('div');bar.className='demobar';bar.innerHTML='<span>▶ Demo playing</span><button type="button">Stop</button>';
+  document.querySelector('.phone').appendChild(bar);bar.querySelector('button').onclick=()=>{demoId++};
+  try{
+    await send('Start over',{reset:true});
+    for(const m of DEMOS[k]){if(id!==demoId)break;await typeInto(m);if(id!==demoId)break;await send(m);while(busy)await sleep(120);await sleep(1100)}
+  }finally{document.body.classList.remove('demo');bar.remove();inp.value=''}
+}
+
+renderSlots();renderLeads();renderKb();renderTrace();renderFb();
 setLang('en');welcome();

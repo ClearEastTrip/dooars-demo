@@ -19,12 +19,20 @@
       <button role="menuitem" data-act="restart">↺ Start over</button>
       <button role="menuitem" data-act="plan">🗺 Plan my trip</button>
       <button role="menuitem" data-act="human">🙋 Talk to a human</button>
+      <button role="menuitem" data-act="feedback">💬 Send feedback</button>
+      <hr>
+      <button role="menuitem" data-demo="bn">▶ Play demo: Bangla</button>
+      <button role="menuitem" data-demo="hi">▶ Play demo: Hindi</button>
+      <button role="menuitem" data-demo="en">▶ Play demo: English</button>
     </div>
   </header>
   <div class="progress" aria-hidden="true"><i id="prog"></i></div>
   <div class="chat" id="chat" role="log" aria-live="polite" aria-label="Conversation"></div>
+  <div class="vhint" id="vhint" hidden aria-live="polite"></div>
   <form class="bar" id="form">
-    <input id="inp" placeholder="Type in English, Bangla or Hindi…" autocomplete="off" aria-label="Type a message" maxlength="300">
+    <button type="button" class="vlang" id="vlang" title="Language you will speak in (tap to change)" aria-label="Voice language">EN</button>
+    <input id="inp" placeholder="English, Bangla or Hindi…" autocomplete="off" aria-label="Type a message" maxlength="300">
+    <button type="button" class="mic" id="mic" aria-label="Speak your message" title="Speak">🎤</button>
     <button aria-label="Send">➤</button>
   </form>
 </main>
@@ -40,12 +48,14 @@
       <button role="tab" aria-selected="true" data-tab="trace">How it answered</button>
       <button role="tab" aria-selected="false" data-tab="slots">Understood</button>
       <button role="tab" aria-selected="false" data-tab="leads">Leads</button>
+      <button role="tab" aria-selected="false" data-tab="fb">Feedback</button>
       <button role="tab" aria-selected="false" data-tab="kb">Knowledge</button>
     </div>
     <div class="pane on" id="p-trace"><div class="empty">Ask something and see which knowledge chunks were retrieved and which rules fired.</div></div>
     <div class="pane" id="p-slots"><div class="slots" id="slots"></div></div>
     <div class="pane" id="p-leads"><div id="leads"></div>
       <div class="btns"><button onclick="exportCsv()">Download CSV</button><button onclick="clearLeads()">Clear</button></div></div>
+    <div class="pane" id="p-fb"></div>
     <div class="pane" id="p-kb"></div>
   </div>
 </aside>
