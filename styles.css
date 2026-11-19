@@ -113,3 +113,5 @@ table{width:100%;border-collapse:collapse;font-size:12.5px}th,td{text-align:left
   body.sheet .side{transform:none}.pane{max-height:40vh}
   .toggle{display:grid}
 }
+.pill{background:#25d36622;color:var(--ok);border-radius:9px;padding:0 7px;font-size:11px;font-weight:600}
+.tick{color:var(--muted);letter-spacing:-2px;font-size:11px}.msg.out.read .tick{color:#53bdeb}

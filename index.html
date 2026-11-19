@@ -12,7 +12,7 @@
 <main class="phone" aria-label="Chat with the Dooars trip assistant">
   <header class="head">
     <div class="avatar" aria-hidden="true">🐘</div>
-    <div class="who"><b>Dooars Trip Assistant</b><small><span class="dot"></span>online · answers from sourced notes</small></div>
+    <div class="who"><b>Dooars Trip Assistant</b><small><span class="dot"></span>online · <span class="pill" id="langPill" title="Language detected from your message">English</span></small></div>
     <button class="iconbtn toggle" id="sheetBtn" aria-label="Open behind the scenes" title="Behind the scenes">⚙</button>
     <button class="iconbtn" id="menuBtn" aria-label="Menu" aria-haspopup="true" aria-expanded="false">⋮</button>
     <div class="menu" id="menu" role="menu">
@@ -24,7 +24,7 @@
   <div class="progress" aria-hidden="true"><i id="prog"></i></div>
   <div class="chat" id="chat" role="log" aria-live="polite" aria-label="Conversation"></div>
   <form class="bar" id="form">
-    <input id="inp" placeholder="Ask about the Dooars…" autocomplete="off" aria-label="Type a message" maxlength="300">
+    <input id="inp" placeholder="Type in English, Hindi or Bangla…" autocomplete="off" aria-label="Type a message" maxlength="300">
     <button aria-label="Send">➤</button>
   </form>
 </main>
@@ -33,7 +33,7 @@
   <div class="card">
     <span class="tag">DEMO</span>
     <h1>How the automation works</h1>
-    <p>A traveller says hi. The bot asks a few questions, builds a plan, answers from a sourced knowledge base (small chunks, searched live), applies safety rules, and saves the lead. Prices here are indicative, not quotes.</p>
+    <p>A traveller says hi in English, Hindi or Bangla. The bot understands how people really ask, replies in their language, builds a plan, politely says no where it should, and saves the lead. Prices here are indicative, not quotes.</p>
   </div>
   <div class="card">
     <div class="tabs" role="tablist">
@@ -51,6 +51,7 @@
 </aside>
 
 <script src="kb.js"></script>
+<script src="content.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

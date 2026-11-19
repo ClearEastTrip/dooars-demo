@@ -1,308 +1,366 @@
-/* Dooars Trip Assistant demo: RAG over small knowledge chunks + rules + planner. No server, no API keys. */
+/* Dooars Trip Assistant demo.
+   Understands English, Hinglish (Roman Hindi), Banglish (Roman Bengali) and Hindi/Bangla script; replies in the customer's language.
+   Curated answers first (content.js), sourced knowledge base (kb.js) as an English-only fallback. No server, no API keys. */
 const $=s=>document.querySelector(s);
 const chat=$('#chat'),inp=$('#inp');
-const KB=window.KB||[];
+const KB=window.KB||[],INTENTS=window.INTENTS||[];
 
 /* =====================================================================
-   1. RETRIEVAL (BM25 over chunks, with synonyms, topic and place boosts)
+   1. TEXT NORMALISING + LANGUAGE DETECTION
    ===================================================================== */
-const STOP=new Set('a an the is are was were be been to of in on at for and or with from by this that it its as do does did can could i you me my we our your what when where how which who whom tell about there any some please want need like get go going visit trip dooars north bengal know give show let us should would will have has had if so than then also very much many more most just really'.split(' '));
-const SYN={
-  rhino:['rhinoceros','horned'],rhinos:['rhinoceros','horned'],safari:['jeep','elephant','ride'],jeep:['safari'],
-  reach:['train','airport','station','railway','road','bus','rail'],train:['rail','railway','express','station'],flight:['airport','air'],fly:['airport','flight'],
-  airport:['bagdogra','flight'],bus:['road','sbstc','nbstc'],drive:['road','km'],
-  rain:['monsoon','rainfall'],monsoon:['rainfall','closure','closed'],weather:['climate','rainfall','season','temperature'],cold:['winter','temperature'],hot:['summer','temperature'],
-  best:['season','closure','november'],season:['best','closure','november'],closed:['closure'],open:['closure','closed'],close:['closure'],
-  eat:['food','cuisine','dish'],food:['cuisine','dish','eat'],stay:['homestay','lodge','resort','hotel','accommodation'],hotel:['resort','lodge','stay'],homestay:['stay','village'],
-  tribe:['tribal','community','people'],people:['community','tribal','population'],culture:['festival','tribal','community','heritage'],festival:['celebration','puja','fair'],
-  cost:['fee','price','rs'],price:['rs','fee','cost','package'],cheap:['budget','price'],budget:['price','package'],package:['price','tour','operator'],
-  tea:['garden','estate','plantation'],bird:['birding','species','avifauna'],birds:['birding','species'],elephant:['jumbo','corridor'],
-  border:['bhutan','jaigaon','phuentsholing'],bhutan:['border','jaigaon','phuentsholing'],trek:['trail','hike','trekking'],fort:['heritage','historic'],
-  night:['stay','overnight'],kolkata:['sealdah','howrah'],river:['jaldhaka','torsa','murti','raidak','teesta'],
-  family:['kids','children'],kids:['children','family']
-};
-const stem=w=>w.length>4?w.replace(/(ies)$/,'y').replace(/(ing|ed|es|s)$/,''):w;
-const tok=s=>(s.toLowerCase().match(/[a-z0-9]+/g)||[]).filter(w=>!STOP.has(w)).map(stem);
-const N=KB.length,docs=KB.map(c=>tok(c.ctx+' '+c.ctx+' '+c.text)),
-  avg=docs.reduce((a,d)=>a+d.length,0)/(N||1),df={};
-docs.forEach(d=>new Set(d).forEach(w=>df[w]=(df[w]||0)+1));
-const TF=docs.map(d=>{const m={};d.forEach(w=>m[w]=(m[w]||0)+1);return m});
-const idf=w=>Math.log(1+(N-(df[w]||0)+.5)/((df[w]||0)+.5));
-const TOPIC_RX={
-  transport:/train|flight|airport|station|bus|reach|road|rail|drive|route|kolkata|bagdogra|njp/,
-  nature:/safari|rhino|elephant|park|wildlife|monsoon|rain|climate|river|season|weather|forest|bird|leopard|tiger|gaur/,
-  places:/see|visit|place|trek|fort|waterfall|village|sunset|viewpoint|attraction|lake|temple|monastery/,
-  stay_tea:/stay|homestay|hotel|lodge|resort|tea|garden|estate|package|cottage|bungalow/,
-  culture:/food|eat|dish|cuisine|language|tribe|tribal|festival|culture|toto|rabha|mech|people|music|dance/,
-  news:/new|latest|recent|2026|launch|opened|announce/,
-  official:/fee|ticket|permit|rule|official|government|booking|fare|price/
-};
-function retrieve(q,k=3){
-  const base=tok(q);if(!base.length)return{hits:[],base};
-  const w={};base.forEach(t=>w[t]=1);
-  base.forEach(t=>(SYN[t]||SYN[t+'s']||[]).forEach(s=>{const st=stem(s);if(!w[st])w[st]=.45}));
-  const intents=Object.keys(TOPIC_RX).filter(t=>TOPIC_RX[t].test(q.toLowerCase()));
-  const out=[];
-  for(let i=0;i<N;i++){
-    let s=0,matched=0;const len=docs[i].length,tf=TF[i];
-    for(const t in w){const f=tf[t];if(!f)continue;if(w[t]===1)matched++;
-      s+=w[t]*idf(t)*(f*2.4)/(f+1.4*(.25+.75*len/avg))}
-    if(!s||!matched)continue;
-    if(intents.includes(KB[i].topic))s*=1.25;
-    const kd=KB[i].kind;s*=kd==='official'?1.15:(kd==='conflict'||kd==='unverified'||kd==='old')?.85:1;
-    out.push({c:KB[i],score:s,matched});
-  }
-  out.sort((a,b)=>b.score-a.score);
-  const hits=[];
-  for(const h of out){
-    if(hits.length>=k)break;
-    if(hits.some(x=>x.c.text.slice(0,60)===h.c.text.slice(0,60)))continue;
-    hits.push(h);
-  }
-  return{hits,base,intents};
+const DEV='०१२३४५६७८९',BEN='০১২৩৪৫৬৭৮৯';
+function norm(s){
+  return s.toLowerCase().replace(/[’‘`]/g,"'").replace(/[०-९]/g,d=>DEV.indexOf(d)).replace(/[০-৯]/g,d=>BEN.indexOf(d))
+    .replace(/[^\p{L}\p{M}\p{N}\s'₹]/gu,' ').replace(/\s+/g,' ').trim();
 }
-const enough=(r)=>{
-  const top=r.hits[0];if(!top)return false;
-  const need=r.base.length>=3?2:1;
-  return top.matched>=need&&top.score>=2.2;
-};
+const HI_W=new Set('hai hain kya kab kaise kitna kitne kitni chahiye mujhe humein hume hum aap aapka aapki aapke nahi nahin batao bataiye bataye sakte sakta sakti kharcha rehne kaisa kaun kaunsa mein bahut thoda abhi liye karna karo karni dijiye dijiye jaye jayen chalein raha rahe rahi lekin aur zyada jaana jana ghoomne ghoomna paas kahan kahaan wala wali milega milta hoga hogi tha thi karenge chahta chahti namaste namaskar pranam dhanyavaad shukriya haan'.split(' '));
+const BN_W=new Set('ami amra amar amader tumi apni apnar apnader kemon kothay koto kobe kokhon jabo jete jabe chai lagbe hobe hoy hoye ache achhe nei nai bhalo valo keno kon thakbo thakar khabar jayga jaiga ghurte ghorte bedate parbo pari bolo bolun dekhte dam taka khoroch pore tarpor ekta ekti kintu tobe jonno kore korte korben korun dien nin chan chaan jachchen jacchi achi acho ar na nomoskar nomoshkar dhonnobad dhanyabad hya'.split(' '));
+const EN_W=new Set('the is are what how can i we you it to for in of and my do does please tell me about there which where when need want have trip plan best time visit should would could any its this that with from'.split(' '));
+function detectLang(raw,n){
+  if(/^(hi|hello|hey|hii+|helo|good (morning|evening|afternoon))$/.test(n))return 'en';
+  if(/[ऀ-ॿ]/.test(raw))return 'hi';
+  if(/[ঀ-৿]/.test(raw))return 'bn';
+  let h=0,b=0;const w=n.split(' ');
+  w.forEach(t=>{if(HI_W.has(t))h++;if(BN_W.has(t))b++});
+  if(/\b(kemon acho|kemon achen)\b/.test(n))b+=2;
+  if(h>b&&h>=1)return 'hi';
+  if(b>h&&b>=1)return 'bn';
+  let e=0;w.forEach(t=>{if(EN_W.has(t))e++});
+  if(!h&&!b&&(e>=2||w.length>=5))return 'en';
+  return null; /* too short to tell: keep current language */
+}
+const LANGNAME={en:'English',hi:'Hinglish',bn:'Banglish'};
 
 /* =====================================================================
-   2. RULES (guardrails that run on every message)
-   ===================================================================== */
-const RULES=[
-  {id:'emergency',rx:/\b(emergency|ambulance|doctor|medical|hospital|snake ?bite|injur|police|lawyer|legal)\b/,
-   reply:"I can't give medical, legal or emergency advice. In an emergency call *112* (India's emergency number). For anything else please speak to a qualified local professional."},
-  {id:'booking',rx:/\b(book(ing)? (me|it|a|the)|reserve|confirm my|pay now|payment link)\b/,
-   reply:null,action:'lead'},
-];
-const CAUTION=[
-  {id:'money',rx:/\b(fee|fees|price|cost|ticket|rate|rates|charge|how much|rs\.?|₹|fare|package)\b/,
-   note:"Prices and fees change, and my notes have no official fee schedule. Confirm with the forest office or your operator before paying."},
-  {id:'timing',rx:/\b(timing|timings|schedule|timetable|slot|slots|available|availability|open|opens|closed|closes|closure|date|dates)\b/,
-   note:"Dates, slots and timetables change. Please confirm before you travel."},
-  {id:'permit',rx:/\b(permit|entry|border|bhutan|totopara|neora|id proof)\b/,
-   note:"Entry rules for borders, tribal areas and some parks change often. Check the latest official rule before you go."}
-];
-const KIND={official:'Official',report:'Reported',operator:'Operator site',conflict:'Sources conflict',unverified:'Unverified',old:'Possibly outdated'};
-const WEAK=new Set(['operator','conflict','unverified','old']);
-
-/* =====================================================================
-   3. UI HELPERS
+   2. INTENT MATCHING (how customers actually ask)
    ===================================================================== */
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const reEsc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+const MATCH=INTENTS.map(it=>({it,kws:it.kw.map(k=>{const n=norm(k);const ascii=/^[\x00-\x7F]+$/.test(n);
+  return{n,w:n.split(' ').length+(n.length>6?.5:0),re:ascii?new RegExp('(?:^| )'+reEsc(n)+'(?:s|es)?(?= |$)'):null}})}));
+function matchIntent(n){
+  const words=n.split(' ').length;let best=null;
+  for(const m of MATCH){
+    if(m.it.short&&words>4)continue;
+    let s=0;
+    for(const k of m.kws){if(k.re?k.re.test(n):n.includes(k.n))s+=k.w}
+    if(s>0&&(!best||s>best.score))best={it:m.it,score:s};
+  }
+  return best;
+}
+
+/* =====================================================================
+   3. SLOT UNDERSTANDING (days, who, interest, month, budget) in 3 languages
+   ===================================================================== */
+const MFULL=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MRX=[/\b(jan|january|janvari|januari)\b/,/\b(feb|february|farvari|phebruari)\b/,/\b(mar|march)\b/,/\b(apr|april|epril)\b/,/\b(may|mai)\b/,/\b(jun|june)\b/,/\b(jul|july|julai)\b/,/\b(aug|august|agast|agosto)\b/,/\b(sep|sept|september|sitambar)\b/,/\b(oct|october|aktubar)\b/,/\b(nov|november|navambar)\b/,/\b(dec|december|disambar)\b/];
+const NUMW={one:1,two:2,three:3,four:4,five:5,six:6,seven:7,ek:1,do:2,dui:2,teen:3,tin:3,char:4,chaar:4,paanch:5,panch:5,chhe:6,chhoy:6,saat:7,shat:7};
+const DAYU='(?:day|days|din|diner|dine|dino|dinon|dinka|दिन|দিন|raat|rat|night|nights|रात|রাত)';
+const S={slots:{},stage:'start',awaiting:null,plan:false,name:'',lang:'en',offer:null,lastPlanText:'',last:null};
+function extractSlots(n){
+  const g={};let m=n.match(new RegExp('\\b(\\d{1,2})\\s*[- ]?\\s*'+DAYU+'(?![a-z])'));
+  let nightWord='';
+  if(m){let d=+m[1];nightWord=m[0];if(/night|raat|rat\b|रात|রাত/.test(m[0]))d+=1;g.days=d}
+  else{m=n.match(new RegExp('\\b('+Object.keys(NUMW).join('|')+')\\s*[- ]?\\s*'+DAYU+'(?![a-z])'));if(m){let d=NUMW[m[1]];if(/night|raat|rat\b|रात|রাত/.test(m[0]))d+=1;g.days=d}}
+  if(!g.days&&/weekend|\bweek end\b/.test(n))g.days=2;
+  if(!g.days&&S.awaiting==='days'){m=n.match(/^(\d{1,2})$/);if(m)g.days=+m[1]}
+  if(g.days)g.days=Math.min(7,Math.max(1,g.days));
+  if(/\b(family|kids?|child|children|parents|bachche|bachchon|bachcha|parivar|poribar)\b|बच्चे|परिवार|বাচ্চা|পরিবার/.test(n))g.group='Family';
+  else if(/\b(couple|honeymoon|wife|husband|partner|romantic|biwi|patni|bou|just two of us)\b|पत्नी|हनीमून|বউ|হানিমুন/.test(n))g.group='Couple';
+  else if(/\b(friends?|gang|group|dost|doston|bondhu|bondhura)\b|दोस्त|বন্ধু/.test(n))g.group='Friends';
+  else if(/\b(solo|alone|myself|akela|akeli|eka|ekla|ekai)\b|अकेला|अकेले|একা/.test(n))g.group='Solo';
+  if(/\b(wildlife|safari|animals?|rhino|elephant|birds?|janwar|jangal|jungle|jongol)\b|जंगल|जानवर|জঙ্গল/.test(n))g.interest='Wildlife';
+  else if(/\b(nature|tea|relax|peace|peaceful|river|scenic|chill|prakriti|prokriti|shanti|chaa|chai bagan|chai bagaan|cha bagan)\b|प्रकृति|शांति|প্রকৃতি|চা/.test(n))g.interest='Nature';
+  else if(/\b(offbeat|adventure|trek|trekking|village|explore|bhutan|gaon|gram)\b|गांव|रोमांच|গ্রাম/.test(n))g.interest='Offbeat';
+  const mi=MRX.findIndex((r,i)=>r.test(n)&&(i!==4||S.awaiting==='month'));
+  if(mi>=0)g.month=MFULL[mi];
+  else if(/\b(winter|sardi|sheet)\b/.test(n))g.month='December';
+  else if(/\b(summer|garmi|grishmo)\b/.test(n))g.month='May';
+  else if(S.awaiting==='month'&&/\b(monsoon|barish|baarish|borsha|rain|rainy)\b/.test(n))g.month='July';
+  if(/\b(budget|cheap|economy|affordable|sasta|sosta|tight)\b|सस्ता|সস্তা/.test(n))g.budget='Budget';
+  else if(/\b(comfort|comfortable|mid|midrange|mid range|medium|moderate|standard|thik thak|theek thaak|majhari)\b|মাঝারি/.test(n))g.budget='Comfort';
+  else if(/\b(premium|luxury|luxurious|high end|dami)\b|लक्ज़री|বিলাসবহুল/.test(n))g.budget='Premium';
+  else if(S.awaiting==='budget'&&/\b(best|bhalo|ujjol|resort)\b/.test(n))g.budget='Premium';
+  return g;
+}
+
+/* =====================================================================
+   4. UI HELPERS
+   ===================================================================== */
 const fmt=s=>esc(s).replace(/\*([^*\n]+)\*/g,'<b>$1</b>');
 const now=()=>new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const inr=n=>'₹'+n.toLocaleString('en-IN');
+const L=o=>o[S.lang]||o.en;
 const scrollDown=()=>{chat.scrollTop=chat.scrollHeight};
-function addMsg(t,who){const d=document.createElement('div');d.className='msg '+who;d.innerHTML=fmt(t)+'<time>'+now()+'</time>';chat.appendChild(d);scrollDown();return d}
+function addMsg(t,who){const d=document.createElement('div');d.className='msg '+who;d.innerHTML=fmt(t)+'<time>'+now()+(who==='out'?' <span class="tick">✓✓</span>':'')+'</time>';chat.appendChild(d);scrollDown();return d}
 function addCard(html){const d=document.createElement('div');d.className='msg in wide';d.innerHTML=html+'<time>'+now()+'</time>';chat.appendChild(d);scrollDown();return d}
 function clearChips(){chat.querySelectorAll('.chips').forEach(e=>e.remove())}
+function markRead(){chat.querySelectorAll('.msg.out:not(.read)').forEach(m=>m.classList.add('read'))}
+async function typing(ms){markRead();const ty=document.createElement('div');ty.className='typing';ty.setAttribute('aria-label','typing');ty.innerHTML='<i></i><i></i><i></i>';chat.appendChild(ty);scrollDown();await sleep(ms);ty.remove()}
+async function say(lines,chipList){for(const t of [].concat(lines)){if(!t)continue;await typing(450+Math.min(800,t.length*5));addMsg(t,'in')}chips(chipList)}
 function chips(list){if(!list||!list.length)return;const c=document.createElement('div');c.className='chips';
-  list.forEach(t=>{const b=document.createElement('button');b.className='chip';b.type='button';b.textContent=t;b.onclick=()=>send(t);c.appendChild(b)});chat.appendChild(c);scrollDown()}
-async function typing(ms){const ty=document.createElement('div');ty.className='typing';ty.setAttribute('aria-label','typing');ty.innerHTML='<i></i><i></i><i></i>';chat.appendChild(ty);scrollDown();await sleep(ms);ty.remove()}
-async function say(lines,chipList){for(const t of [].concat(lines)){await typing(380+Math.min(700,t.length*3));addMsg(t,'in')}chips(chipList)}
-const badge=k=>`<span class="badge b-${k}">${KIND[k]}</span>`;
-function shortText(t,n=300){if(t.length<=n)return t;const c=t.slice(0,n);const i=Math.max(c.lastIndexOf('. '),c.lastIndexOf('; '));return (i>n*.5?c.slice(0,i):c.replace(/\s+\S*$/,''))+'…'}
-function sourcesHtml(hits){const seen=new Set(),a=[];hits.forEach(h=>h.c.src.forEach(s=>{if(!seen.has(s.u)&&a.length<4){seen.add(s.u);a.push(`<a href="${esc(s.u)}" target="_blank" rel="noopener noreferrer">${esc(s.l)}</a>`)}}));return a.length?`<div class="srcs">Sources: ${a.join('')}</div>`:''}
-function factsHtml(hits,hideCtx){return '<ul class="facts">'+hits.map(h=>`<li class="${h.c.kind}"><em>${hideCtx?'':esc(h.c.ctx)}${badge(h.c.kind)}</em>${esc(shortText(h.c.text))}</li>`).join('')+'</ul>'}
+  list.forEach(o=>{const b=document.createElement('button');b.className='chip';b.type='button';b.textContent=o.label;b.onclick=()=>send(o.label,o);c.appendChild(b)});chat.appendChild(c);scrollDown()}
 
-/* ---------- side panel ---------- */
-const S={slots:{},stage:'start',awaiting:null,plan:false,name:'',lastPlanText:''};
+/* chip labels per language */
+const CHIPL={plan:['Plan my trip','Trip plan karo','Trip plan koro'],besttime:['Best time to go','Kab jaana best hai','Kokhon jabo'],reach:['How to reach','Kaise pahunchein','Kibhabe jabo'],
+  price:['Rough cost','Kitna kharcha','Koto khoroch'],human:['Talk to a human','Team se baat karein','Team-er sathe kotha'],safari:['Safari details','Safari ki jaankari','Safari-r details'],
+  stay:['Where to stay','Kahan rukein','Kothay thakbo'],food:['Local food','Khana kaisa hai','Khabar kemon'],monsoon:['Monsoon plans','Barish mein','Borsha-y'],homestay:['Homestays','Homestay','Homestay'],
+  jaldapara:['Jaldapara rhinos','Jaldapara rhino','Jaldapara rhino'],gorumara:['About Gorumara','Gorumara ke baare mein','Gorumara-r kotha'],kolkata:['From Kolkata','Kolkata se','Kolkata theke'],
+  days:['How many days?','Kitne din ke liye?','Koto din?'],expensive:['Cheaper options','Sasta option','Kom khoroch-er option'],sighting:['Will I see animals?','Janwar dikhenge?','Janwar dekha jabe?'],
+  packing:['What to pack','Kya le jaayein','Ki niye jabo'],weather:['Weather','Mausam','Aabohaowa'],family:['With kids','Bachchon ke saath','Bachcha niye'],veg:['Veg food','Veg khana','Niramish khabar'],
+  things:['Things to do','Kya dekhein','Ki dekhbo'],bhutan:['Bhutan border','Bhutan border','Bhutan border'],buxa:['Buxa trek','Buxa trek','Buxa trek'],booking:['Get a quote','Quote chahiye','Quote chai']};
+const LI={en:0,hi:1,bn:2};
+const C=id=>({label:(CHIPL[id]||[id,id,id])[LI[S.lang]],intent:id});
+
+/* =====================================================================
+   5. SIDE PANEL (how it answered)
+   ===================================================================== */
 const ORDER=['days','group','interest','month','budget'];
 const LABEL={days:'Days',group:'Who',interest:'Interest',month:'Month',budget:'Budget'};
 function renderSlots(){$('#slots').innerHTML=ORDER.map(k=>{const v=S.slots[k];return `<div class="slot ${v?'on':''}">${LABEL[k]}<b>${v?esc(String(v)):'–'}</b></div>`}).join('');
   $('#prog').style.width=(ORDER.filter(k=>S.slots[k]).length/ORDER.length*100)+'%'}
 const traces=[];
-function trace(q,route,rules,hits){traces.unshift({q,route,rules,hits});renderTrace()}
-function renderTrace(){const p=$('#p-trace');
-  p.innerHTML=traces.slice(0,8).map(t=>`<div class="trace"><q>“${esc(t.q.slice(0,70))}”</q><span class="route">route: ${esc(t.route)}</span>
-    ${t.rules.map(r=>`<span class="rule">rule: ${esc(r)}</span>`).join('')}
-    ${t.hits&&t.hits.length?'<ul>'+t.hits.map(h=>`<li><b>${esc(h.c.id)}</b> · ${esc(h.c.ctx)} · score ${h.score.toFixed(1)} · ${esc(KIND[h.c.kind])}</li>`).join('')+'</ul>':''}</div>`).join('')||'<div class="empty">Nothing yet.</div>'}
-function renderKb(){const by={};KB.forEach(c=>by[c.topic]=(by[c.topic]||0)+1);const kinds={};KB.forEach(c=>kinds[c.kind]=(kinds[c.kind]||0)+1);const mx=Math.max(...Object.values(by));
-  $('#p-kb').innerHTML=`<div class="stat"><div><b>${KB.length}</b><small>chunks</small></div><div><b>${kinds.official||0}</b><small>official</small></div><div><b>${(kinds.conflict||0)+(kinds.unverified||0)+(kinds.old||0)}</b><small>flagged</small></div></div>
-  <div class="bars">${Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div><span style="width:78px">${esc(k.replace('_',' '))}</span><i style="width:${v/mx*150}px"></i>${v}</div>`).join('')}</div>
-  <p class="empty" style="margin-top:8px">Each chunk is one short, sourced fact from the research dossier. Chunks marked conflict, unverified or old are shown with a warning.</p>`}
+function trace(q,route,rules=[],extra=''){traces.unshift({q,route,rules,extra,lang:S.lang});renderTrace()}
+function renderTrace(){$('#p-trace').innerHTML=traces.slice(0,8).map(t=>`<div class="trace"><q>“${esc(t.q.slice(0,70))}”</q><span class="route">${esc(t.lang.toUpperCase())} · ${esc(t.route)}</span>
+  ${t.rules.map(r=>`<span class="rule">${esc(r)}</span>`).join('')}${t.extra?`<div style="color:var(--muted);margin-top:3px">${esc(t.extra)}</div>`:''}</div>`).join('')||'<div class="empty">Nothing yet.</div>'}
+function renderKb(){
+  const by={};KB.forEach(c=>by[c.topic]=(by[c.topic]||0)+1);
+  $('#p-kb').innerHTML=`<div class="stat"><div><b>${INTENTS.length}</b><small>question types</small></div><div><b>3</b><small>languages</small></div><div><b>${KB.length}</b><small>sourced facts</small></div></div>
+  <p class="empty">Customers can write in English, Hinglish (Roman Hindi), Banglish (Roman Bengali), or Hindi and Bangla script. The bot answers in the same language. Curated answers come first; the sourced fact base (from the research dossier) backs up English questions. Sources appear here, never in the chat.</p>`;
+}
+function setLang(l){if(!l||l===S.lang&&$('#langPill').dataset.l===l)return;S.lang=l;const p=$('#langPill');p.dataset.l=l;p.textContent=LANGNAME[l]}
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.setAttribute('aria-selected',x===b));document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='p-'+b.dataset.tab))});
 $('#sheetBtn').onclick=()=>document.body.classList.toggle('sheet');
 $('#menuBtn').onclick=()=>{const m=$('#menu');const o=!m.classList.contains('open');m.classList.toggle('open',o);$('#menuBtn').setAttribute('aria-expanded',o)};
 document.addEventListener('click',e=>{if(!e.target.closest('#menu,#menuBtn'))$('#menu').classList.remove('open')});
-$('#menu').onclick=e=>{const a=e.target.dataset.act;if(!a)return;$('#menu').classList.remove('open');send(a==='restart'?'restart':a==='plan'?'Plan my trip':'Talk to a human')};
+$('#menu').onclick=e=>{const a=e.target.dataset.act;if(!a)return;$('#menu').classList.remove('open');send(a==='restart'?'start over':a==='plan'?CHIPL.plan[LI[S.lang]]:CHIPL.human[LI[S.lang]],a==='restart'?{reset:true}:{intent:a})};
 
 /* =====================================================================
-   4. PLANNER (questions, slots, itinerary)
+   6. PLANNER (questions, itinerary) in 3 languages
    ===================================================================== */
-const MONTHS=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
-const MFULL=['January','February','March','April','May','June','July','August','September','October','November','December'];
-const WORDS={one:1,two:2,three:3,four:4,five:5,six:6,seven:7};
-/* indicative per-person per-night ranges derived from operator 3N/4D package listings in the dossier (ex-transport, safari fees often extra) */
 const RATE={budget:[1700,2100],comfort:[2800,3300],premium:[4500,5500]};
+const Q={days:['How many days do you have?','Aapke paas kitne din hain?','Apnar kotodin somoy ache?'],group:['Who is travelling?','Kaun-kaun ja raha hai?','Ke ke jachchen?'],
+  interest:['What do you enjoy most?','Aapko sabse zyada kya pasand hai?','Apnar sobcheye ki bhalo lage?'],month:['Which month are you thinking of?','Kaun sa mahina soch rahe hain?','Kon mas-e jete chan?'],
+  budget:['What budget feels right?','Kaisa budget theek rahega?','Kemon budget bhalo hobe?']};
+const OPT={
+  days:[['2 days','2 din','2 din',2],['3 days','3 din','3 din',3],['4 days','4 din','4 din',4],['5 days','5 din','5 din',5]],
+  group:[['Family','Parivar','Poribar','Family'],['Couple','Couple','Couple','Couple'],['Friends','Dost','Bondhu','Friends'],['Solo','Akele','Ekla','Solo']],
+  interest:[['Wildlife & safari','Jungle & safari','Jongol & safari','Wildlife'],['Nature & tea gardens','Prakriti & chai bagan','Prokriti & chaa-bagan','Nature'],['Offbeat & adventure','Offbeat & adventure','Offbeat & adventure','Offbeat']],
+  month:[['November','November','November','November'],['December','December','December','December'],['March','March','March','March'],['July','July','July','July']],
+  budget:[['Budget','Budget','Budget','Budget'],['Comfort','Comfort','Comfort','Comfort'],['Premium','Premium','Premium','Premium']]};
+const ACK={
+  group:{Family:['Lovely, a family trip! 👨‍👩‍👧','Waah, family trip! 👨‍👩‍👧','Darun, family trip! 👨‍👩‍👧'],Couple:['Nice, a trip for two! 💚','Waah, do logon ka trip! 💚','Darun, dujoner trip! 💚'],
+    Friends:["Fun, a friends' trip! 🎉",'Maza aayega, dosto ka trip! 🎉','Moja hobe, bondhu-der trip! 🎉'],Solo:['Great, solo trips here feel very peaceful 🌿','Badhiya, yahan solo trip bahut shaant lagti hai 🌿','Darun, ekhane solo trip khub shanto 🌿']},
+  interest:{Wildlife:['Great pick, the Dooars is famous for rhinos and elephants 🦏','Badhiya, Dooars rhino aur haathiyon ke liye mashhoor hai 🦏','Darun, Dooars rhino ar hati-r jonno bikhyato 🦏'],
+    Nature:['Lovely, tea gardens and rivers it is 🍵','Achha, chai bagan aur nadiyan 🍵','Bhalo, chaa-bagan ar nodi 🍵'],Offbeat:['Nice, we will keep it quiet and adventurous 🥾','Achha, shaant aur adventurous rakhenge 🥾','Bhalo, shanto ar adventurous rakhbo 🥾']},
+  monsoon:['Just so you know, the main parks are usually closed in the rains, but I will plan around it 🌧️','Dhyan rahe, barish mein bade parks aam taur par band rehte hain, par main us hisaab se plan karunga 🌧️','Mone rakhben, borsha-y boro park gulo sadharonoto bondho thake, tobe ami sei onujayi plan korbo 🌧️']};
 const DAYS={
- gorumara:{t:'Gorumara & Lataguri',d:'Morning jeep safari in Gorumara National Park. Afternoon at the Murti river banks and the nearby watchtowers.',q:'Gorumara safari permit booking'},
- jaldapara:{t:'Jaldapara & Hollong',d:'Early safari in Jaldapara, known for the one-horned rhino. Slow evening around Hollong.',q:'Jaldapara safari rhino'},
- samsing:{t:'Samsing & Suntalekhola',d:'Drive up through tea gardens to Samsing and Suntalekhola for forest walks, river views and sunset.',q:'Samsing Suntalekhola'},
- jayanti:{t:'Jayanti & Buxa',d:'Buxa Tiger Reserve side: Jayanti river bed, forest trails and a trek towards Buxa Fort.',q:'Buxa Jayanti fort'},
- tea:{t:'Tea gardens & villages',d:'Walk through a working tea estate near Chalsa, meet local families and have a village lunch.',q:'tea garden estate visit'},
- border:{t:'Bhutan border day',d:'Day trip to the Jaigaon-Phuentsholing gate for the border town and market.',q:'Jaigaon Phuentsholing Bhutan border entry'},
- birds:{t:'Birding morning',d:'Dawn birdwatching around the river banks or wetlands, then a relaxed afternoon.',q:'birding birds Dooars'}
+ gorumara:{t:['Gorumara & Lataguri','Gorumara aur Lataguri','Gorumara ar Lataguri'],d:['Morning jeep safari in Gorumara. Afternoon by the Murti river and the watchtowers.','Subah Gorumara mein jeep safari. Dopahar mein Murti nadi aur watchtowers.','Sokale Gorumara-y jeep safari. Dupure Murti nodi ar watchtower.']},
+ jaldapara:{t:['Jaldapara & Hollong','Jaldapara aur Hollong','Jaldapara ar Hollong'],d:['Early safari in Jaldapara, famous for the one-horned rhino. Slow evening around Hollong.','Subah Jaldapara mein safari, ek-singh wale rhino ke liye mashhoor. Shaam Hollong mein aaram.','Bhore Jaldapara-y safari, ek-shringo rhino-r jonno bikhyato. Sondhye Hollong-e bishram.']},
+ samsing:{t:['Samsing & Suntalekhola','Samsing aur Suntalekhola','Samsing ar Suntalekhola'],d:['Drive through tea gardens to Samsing and Suntalekhola. Forest walks, river views and sunset.','Chai bagan ke beech se Samsing aur Suntalekhola. Jungle walk, nadi ka nazara aur sunset.','Chaa-bagan-er majh diye Samsing ar Suntalekhola. Jongole hnata, nodir drishyo ar sunset.']},
+ jayanti:{t:['Jayanti & Buxa','Jayanti aur Buxa','Jayanti ar Buxa'],d:['Jayanti river bed, forest trails and a trek towards Buxa Fort.','Jayanti nadi ka kinara, jungle ke raste aur Buxa Fort ki trek.','Jayanti nodir tir, jongoler poth ar Buxa Fort-er trek.']},
+ tea:{t:['Tea gardens & villages','Chai bagan aur gaon','Chaa-bagan ar gram'],d:['Walk through a tea estate near Chalsa, meet local families and have a village lunch.','Chalsa ke paas chai bagan mein sair, gaon ke parivaron se milna aur gaon ka khana.','Chalsa-r kache chaa-bagane hnata, gramer manusher sathe dekha ar gramer khabar.']},
+ border:{t:['Bhutan border day','Bhutan border ka din','Bhutan border-er din'],d:['Day trip to Jaigaon and the Phuentsholing gate. Carry a valid photo ID.','Jaigaon aur Phuentsholing gate ka day trip. Valid photo ID saath rakhein.','Jaigaon ar Phuentsholing gate-er day trip. Valid photo ID niye jaben.']},
+ birds:{t:['Birding morning','Birding ki subah','Birding-er bhor'],d:['Dawn birdwatching by the river, then a relaxed afternoon.','Subah-subah nadi ke kinare birdwatching, phir aaram ki dopahar.','Bhore nodir dhare birdwatching, tarpor aramer dupur.']}
 };
 const SEQ={wildlife:['gorumara','jaldapara','jayanti','samsing','birds'],nature:['tea','samsing','jayanti','gorumara','jaldapara'],offbeat:['samsing','jayanti','border','gorumara','jaldapara']};
-const isMonsoon=m=>m>=5&&m<=8;
-const Q={
- days:['How many days do you have?',['2 days','3 days','4 days','5 days']],
- group:['Who is travelling?',['Family','Couple','Friends','Solo']],
- interest:['What do you enjoy most?',['Wildlife & safari','Nature & tea gardens','Offbeat & adventure']],
- month:['Which month are you thinking of?',['November','December','March','July']],
- budget:['What budget feels right?',['Budget','Comfort','Premium']]
+const SX={
+  title:d=>['Your '+d+'-day Dooars plan','Aapka '+d+' din ka Dooars plan','Apnar '+d+' diner Dooars plan'],
+  arrive:['Arrive at Bagdogra or NJP and transfer to the Dooars (a few hours by road). ','Bagdogra ya NJP pahunchkar Dooars ke liye nikalein (road se kuch ghante). ','Bagdogra ba NJP te pouchhe Dooars-er dike roana din (gari-te kichu ghonta). '],
+  leave:[' Check out and head to the station or airport.',' Check out karke station ya airport ke liye nikalein.',' Check out kore station ba airport-er dike roana din.'],
+  cost:(lo,hi,n,b)=>[`Rough idea: ${inr(lo)} to ${inr(hi)} per person for ${n} night${n>1?'s':''} (${b.toLowerCase()}). It's only a guide, not a quote. Travel to Bagdogra/NJP and safari tickets are usually extra.`,
+    `Andaza: ${inr(lo)} se ${inr(hi)} per person, ${n} raat ke liye (${b.toLowerCase()}). Ye sirf andaza hai, quote nahi. Bagdogra/NJP tak ka safar aur safari ticket aam taur par alag lagte hain.`,
+    `Andaj: ${inr(lo)} theke ${inr(hi)} per person, ${n} raat-er jonno (${b.toLowerCase()}). Eta shudhu andaj, quote noy. Bagdogra/NJP porjonto jatayat ar safari ticket sadharonoto alada.`],
+  warn:['The main national parks are usually closed in the monsoon (about mid-June to mid-September), so this plan avoids them.','Monsoon mein bade national parks aam taur par band rehte hain (lagbhag mid-June se mid-September), isliye plan mein unhe nahi rakha.','Monsoon-e boro national park gulo sadharonoto bondho thake (proay mid-June theke mid-September), tai plan-e rakhini.'],
+  fam:['Family tip: keep drives under about 3 hours a day and add one kid-friendly stop.','Family tip: din mein 3 ghante se kam drive rakhein aur ek bachchon ke layak jagah jodein.','Family tip: diney 3 ghontar kom gari rakhun ar ekta bachchader upojogi jayga jurun.'],
+  share:['Share on WhatsApp','WhatsApp par share karein','WhatsApp-e share korun'],
+  pre:(d,g,i,m)=>[`My ${d}-day Dooars plan (${g}, ${i}, ${m}):`,`Mera ${d} din ka Dooars plan (${g}, ${i}, ${m}):`,`Amar ${d} diner Dooars plan (${g}, ${i}, ${m}):`],
+  more:['Want to change anything?','Kuch badalna hai?','Kichu bodlate chan?'],
+  chdays:['Change days','Din badlein','Din bodlan'],chbud:['Change budget','Budget badlein','Budget bodlan'],ask:['Ask something','Kuch poochein','Kichu jigges korun']
 };
-function extract(t){
-  const got={};let m=t.match(/\b(\d{1,2})\s*[- ]?\s*(day|days|night|nights)\b/);
-  if(m){let n=+m[1];if(/night/.test(m[2]))n+=1;got.days=n}
-  else{m=t.match(/\b(one|two|three|four|five|six|seven)\s*[- ]?\s*(day|days|night|nights)\b/);if(m){let n=WORDS[m[1]];if(/night/.test(m[2]))n+=1;got.days=n}}
-  if(!got.days&&/weekend/.test(t))got.days=2;
-  if(!got.days&&S.awaiting==='days'){m=t.match(/^\s*(\d{1,2})\s*$/);if(m)got.days=+m[1]}
-  if(got.days)got.days=Math.min(7,Math.max(1,got.days));
-  if(/family|kids?|child|parents/.test(t))got.group='Family';
-  else if(/couple|honeymoon|wife|husband|partner|romantic/.test(t))got.group='Couple';
-  else if(/friends|gang|\bgroup\b/.test(t))got.group='Friends';
-  else if(/solo|alone|myself/.test(t))got.group='Solo';
-  if(/wildlife|safari|animal|rhino|elephant|bird/.test(t))got.interest='Wildlife';
-  else if(/nature|tea|relax|peace|river|scenic|chill/.test(t))got.interest='Nature';
-  else if(/offbeat|adventure|trek|village|explore|bhutan/.test(t))got.interest='Offbeat';
-  const mi=MONTHS.findIndex(x=>new RegExp('\\b'+x+'[a-z]*\\b').test(t)&&(x!=='may'||S.awaiting==='month'));
-  if(mi>=0)got.month=MFULL[mi];else if(/winter/.test(t))got.month='December';else if(/summer/.test(t))got.month='May';else if(/monsoon/.test(t)&&S.awaiting==='month')got.month='July';
-  if(/budget|cheap|economy|affordable/.test(t))got.budget='Budget';
-  else if(/comfort|mid|standard|moderate/.test(t))got.budget='Comfort';
-  else if(/premium|luxury|high-end|resort/.test(t))got.budget='Premium';
-  return got;
-}
+const isMonsoon=m=>m>=5&&m<=8;
 function buildPlan(){
-  const {days,group,interest,month,budget}=S.slots,mi=MFULL.indexOf(month),warn=isMonsoon(mi);
+  const {days,group,interest,month,budget}=S.slots,mi=MFULL.indexOf(month),warn=isMonsoon(mi),li=LI[S.lang];
   let seq=SEQ[interest.toLowerCase()].slice();
   if(warn)seq=seq.filter(k=>k!=='gorumara'&&k!=='jaldapara').concat(['tea','birds']).filter((v,i,a)=>a.indexOf(v)===i);
-  const items=[];for(let i=0;i<days;i++){const b=DAYS[seq[i%seq.length]];
-    let d=b.d;if(i===0)d='Arrive at Bagdogra or NJP and transfer to the Dooars (a few hours by road). '+d;
-    if(i===days-1&&days>1)d+=' Check out and head to the station or airport.';
-    items.push({n:i+1,t:b.t,d,q:b.q})}
+  const items=[];for(let i=0;i<days;i++){const b=DAYS[seq[i%seq.length]];let d=b.d[li];if(i===0)d=SX.arrive[li]+d;if(i===days-1&&days>1)d+=SX.leave[li];items.push({n:i+1,t:b.t[li],d})}
   const [lo,hi]=RATE[budget.toLowerCase()],nights=Math.max(1,days-1);
-  const cost=`Indicative: ${inr(lo*nights)} to ${inr(hi*nights)} per person for ${nights} night${nights>1?'s':''} (${budget.toLowerCase()}). Based on operator package listings, not a quote. Transport to Bagdogra/NJP and safari fees are usually extra.`;
-  /* "good to know" = retrieved chunks for the plan */
-  const picks=[
-    ['Gorumara park closed monsoon June September',/16 Jun(e)?\s*(to|-)\s*15 Sep/i],
-    ['Jaldapara online safari booking seats',/online safari booking|safari tickets|tickets issued/i],
-    ['Bagdogra airport distance Dooars road',/Bagdogra|NJP|New Jalpaiguri/i]
-  ];
-  const know=[];
-  picks.forEach(([q,rx])=>{const h=retrieve(q,12).hits.find(x=>rx.test(x.c.text)&&!know.some(k=>k.c.id===x.c.id));if(h)know.push(h)});
-  return{items,cost,know,warn,group};
+  return{items,cost:SX.cost(lo*nights,hi*nights,nights,budget)[li],warn,group};
 }
-function planText(p){const {days,group,interest,month}=S.slots;
-  return `My ${days}-day Dooars plan (${group.toLowerCase()}, ${interest.toLowerCase()}, ${month}):\n\n`+p.items.map(i=>`Day ${i.n}: ${i.t}\n${i.d}`).join('\n\n')+`\n\n${p.cost}\n\nPlanned with the Dooars Trip Assistant demo.`}
-async function askNext(){
-  const miss=ORDER.find(k=>!S.slots[k]);
-  if(miss){S.awaiting=miss;S.stage='ask';trace('(planner)','planner: ask '+miss,[],[]);await say(Q[miss][0],Q[miss][1]);return}
-  S.awaiting=null;S.stage='plan';S.plan=true;
+function planText(p){const {days,group,interest,month}=S.slots,li=LI[S.lang];
+  return SX.pre(days,group,interest,month)[li]+'\n\n'+p.items.map(i=>`Day ${i.n}: ${i.t}\n${i.d}`).join('\n\n')+`\n\n${p.cost}\n\nDooars Trip Assistant (demo)`}
+async function askNext(ack){
+  const miss=ORDER.find(k=>!S.slots[k]),li=LI[S.lang];
+  if(miss){S.awaiting=miss;S.stage='ask';
+    const lines=[];if(ack)lines.push(ack);lines.push(Q[miss][li]);
+    await say(lines,OPT[miss].map(o=>({label:o[li],set:{[miss]:o[3]}})));return}
+  S.awaiting=null;S.stage='plan';S.plan=true;S.offer=null;
   const p=buildPlan();S.lastPlanText=planText(p);
-  trace('(planner)','planner: build itinerary',p.warn?['monsoon: parks removed']:[],p.know);
-  await typing(900);
+  trace('(planner)','itinerary built',[p.warn?'monsoon: parks removed':'seasonal check ok'],S.lastPlanText.split('\n')[0]);
+  await typing(1000);
   const {days,interest,month}=S.slots;
-  const tip=p.group==='Family'?'<p class="caution">Family tip: keep drives under about 3 hours a day and add one kid-friendly stop.</p>':'';
-  const warn=p.warn?'<p class="caution">The main national parks are usually closed in the monsoon (about mid-June to mid-September), so this plan avoids them.</p>':'';
+  const warn=p.warn?`<p class="caution">${esc(SX.warn[li])}</p>`:'';
+  const tip=p.group==='Family'?`<p class="caution">${esc(SX.fam[li])}</p>`:'';
   const wa='https://wa.me/?text='+encodeURIComponent(S.lastPlanText);
-  addCard(`<div class="plan"><h3>Your ${days}-day Dooars plan</h3><div class="sub">${esc(p.group)} · ${esc(interest)} · ${esc(month)}</div>
+  const card=addCard(`<div class="plan"><h3>${esc(SX.title(days)[li])}</h3><div class="sub">${esc(p.group)} · ${esc(interest)} · ${esc(month)}</div>
    <ol class="tl">${p.items.map(i=>`<li><span class="n">${i.n}</span><b>${esc(i.t)}</b><span>${esc(i.d)}</span></li>`).join('')}</ol>
-   ${warn}${tip}
-   <div class="cost">${esc(p.cost)}</div>
-   ${p.know.length?`<div class="know"><h4>Good to know (from my notes)</h4>${factsHtml(p.know)}${sourcesHtml(p.know)}</div>`:''}
-   <div class="cta"><button class="btn" data-go="Get a quote">Get a quote</button><a class="btn ghost" href="${wa}" target="_blank" rel="noopener noreferrer">Share on WhatsApp</a></div></div>`);
-  chat.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>send(b.dataset.go));
-  chips(['Change days','Change budget','Best time to visit?','Start over']);
+   ${warn}${tip}<div class="cost">${esc(p.cost)}</div>
+   <div class="cta"><button class="btn" data-q="1">${esc(CHIPL.booking[li])}</button><a class="btn ghost" href="${wa}" target="_blank" rel="noopener noreferrer">${esc(SX.share[li])}</a></div></div>`);
+  card.querySelector('[data-q]').onclick=()=>send(CHIPL.booking[li],{intent:'booking'});
+  await say(SX.more[li],[{label:SX.chdays[li],redo:'days'},{label:SX.chbud[li],redo:'budget'},C('price'),C('human')]);
 }
 
-/* ---------- leads ---------- */
+/* =====================================================================
+   7. LEADS
+   ===================================================================== */
 let memLeads=null;
 const getLeads=()=>{if(memLeads)return memLeads;try{return JSON.parse(localStorage.getItem('dooarsLeads')||'[]')}catch(e){return[]}};
 const setLeads=a=>{memLeads=a;try{localStorage.setItem('dooarsLeads',JSON.stringify(a))}catch(e){}};
-function renderLeads(){const a=getLeads();$('#leads').innerHTML=a.length?'<table><tr><th>Name</th><th>Phone</th><th>Plan</th></tr>'+a.map(l=>`<tr><td>${esc(l.name)}</td><td>${esc(l.phone)}</td><td>${esc(l.plan)}</td></tr>`).join('')+'</table>':'<div class="empty">No leads yet. Ask the bot for a quote and a row appears here.</div>'}
-function exportCsv(){const a=getLeads();const csv='name,phone,plan,time\n'+a.map(l=>[l.name,l.phone,l.plan,l.time].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+function renderLeads(){const a=getLeads();$('#leads').innerHTML=a.length?'<table><tr><th>Name</th><th>Phone</th><th>Plan</th><th>Lang</th></tr>'+a.map(l=>`<tr><td>${esc(l.name)}</td><td>${esc(l.phone)}</td><td>${esc(l.plan)}</td><td>${esc(l.lang||'')}</td></tr>`).join('')+'</table>':'<div class="empty">No leads yet. Ask the bot for a quote and a row appears here.</div>'}
+function exportCsv(){const a=getLeads();const csv='name,phone,plan,lang,time\n'+a.map(l=>[l.name,l.phone,l.plan,l.lang,l.time].map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(',')).join('\n');
   const u=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const x=document.createElement('a');x.href=u;x.download='leads.csv';x.click();URL.revokeObjectURL(u)}
 function clearLeads(){setLeads([]);renderLeads()}
+const LS={
+  name:['What\'s your name?','Aapka naam kya hai?','Apnar naam ki?'],
+  badname:['Sorry, I just need your first name. What should I call you?','Maaf kijiye, mujhe bas aapka pehla naam chahiye. Kya kehkar bulaoon?','Dukkhito, amar shudhu apnar naam dorkar. Ki bole dakbo?'],
+  phone:n=>[`Thanks ${n}! What's the best WhatsApp number to reach you on?`,`Shukriya ${n}! Aapse kis WhatsApp number par baat karein?`,`Dhonnobad ${n}! Kon WhatsApp number-e jogajog korbo?`],
+  badphone:['That doesn\'t look like a phone number. Could you type it again, with the country code?','Ye phone number jaisa nahi lag raha. Country code ke saath dobara likhein?','Eta phone number-er moto lagchhe na. Country code shoho abar likhun?'],
+  saved:n=>[`All set, ${n}! 🎉 A planner from our team will message you on WhatsApp with exact prices and availability. Meanwhile, ask me anything about the Dooars.`,`Ho gaya, ${n}! 🎉 Hamari team ka planner aapko WhatsApp par exact price aur availability ke saath message karega. Tab tak Dooars ke baare mein kuch bhi poochiye.`,`Hoye gelo, ${n}! 🎉 Amader team-er planner apnake WhatsApp-e exact dam ar availability shoho message korbe. Tatokkhon Dooars somporke kichu jigges korun.`]
+};
+async function startLead(intro){
+  S.stage='lead_name';trace('(lead)','lead capture started',['no booking promises']);
+  await say([].concat(intro||[]).concat(LS.name[LI[S.lang]]));
+}
 
 /* =====================================================================
-   5. THE BRAIN: route every message
+   8. FALLBACK RETRIEVAL (English long-tail questions, from the sourced facts)
    ===================================================================== */
-async function answerRag(raw,r){
-  const rules=[];const t=raw.toLowerCase();
-  const hits=r.hits.slice(0,3);
-  const top=hits[0].c;
-  const same=hits.every(h=>h.c.ctx===top.ctx);
-  const lead=same?`Here's what my notes say about *${top.ctx}*:`:"Here's what my notes say:";
-  let caution=[];
-  CAUTION.forEach(c=>{if(c.rx.test(t)){rules.push('caution:'+c.id);caution.push(c.note)}});
-  if(hits.some(h=>WEAK.has(h.c.kind))){rules.push('weak-source');caution.push("Some of these come from operator sites or conflicting reports, so treat them as a guide and confirm before booking.")}
-  trace(raw,'rag: '+hits.length+' chunks',rules,hits);
-  await typing(700);
-  addCard(`<div class="lead">${fmt(lead)}</div>${factsHtml(hits,same)}${caution.length?`<div class="caution">${esc([...new Set(caution)].slice(0,2).join(' '))}</div>`:''}${sourcesHtml(hits)}`);
-  const follow=S.plan?['Get a quote','Change days','Ask another question']:['Plan my trip','Ask another question','Talk to a human'];
-  chips(follow);
+const STOP=new Set('a an the is are was were be been to of in on at for and or with from by this that it its as do does did can could i you me my we our your what when where how which who tell about there any some please want need like get go going visit trip dooars north bengal know give show let us should would will have has had if so than then also very much many more most just really'.split(' '));
+const stem=w=>w.length>4?w.replace(/(ies)$/,'y').replace(/(ing|ed|es|s)$/,''):w;
+const tok=s=>(s.toLowerCase().match(/[a-z0-9]+/g)||[]).filter(w=>!STOP.has(w)).map(stem);
+const NK=KB.length,docs=KB.map(c=>tok(c.ctx+' '+c.ctx+' '+c.text)),avg=docs.reduce((a,d)=>a+d.length,0)/(NK||1),df={};
+docs.forEach(d=>new Set(d).forEach(w=>df[w]=(df[w]||0)+1));
+const TF=docs.map(d=>{const m={};d.forEach(w=>m[w]=(m[w]||0)+1);return m});
+const idf=w=>Math.log(1+(NK-(df[w]||0)+.5)/((df[w]||0)+.5));
+function retrieve(q){
+  const base=tok(q);if(!base.length)return null;let best=null;
+  for(let i=0;i<NK;i++){let s=0,matched=0;const len=docs[i].length,tf=TF[i];
+    base.forEach(t=>{const f=tf[t];if(!f)return;matched++;s+=idf(t)*(f*2.4)/(f+1.4*(.25+.75*len/avg))});
+    if(matched&&(!best||s>best.s))best={c:KB[i],s,matched};}
+  if(!best)return null;
+  const need=base.length>=3?2:1;
+  return best.matched>=need&&best.s>=3?best:null;
 }
-async function reply(raw,forceRag){
-  const t=raw.toLowerCase().trim();
-  if(forceRag){const r=retrieve(t,3);if(enough(r))return answerRag(raw,r);trace(raw,'fallback: no confident match',['honest-fallback'],r.hits);return say("I don't have a reliable answer for that in my notes. I can connect you to a human.",['Plan my trip','Talk to a human'])}
-  if(/^(restart|start over|reset|new plan)$/.test(t)){S.slots={};S.stage='start';S.plan=false;S.awaiting=null;renderSlots();trace(raw,'reset',[],[]);return say("Fresh start! What would you like to do?",['Plan my trip','Best time to visit?','How to reach Dooars?','Safari & parks'])}
-  if(S.stage==='lead_name'){if(/\?/.test(raw)||raw.trim().length>40||raw.trim().split(/\s+/).length>4){trace(raw,'lead: invalid name',['validate:name'],[]);return say('Sorry, I just need your first name for the quote. What should I call you?')}S.name=raw.trim().slice(0,60);S.stage='lead_phone';trace(raw,'lead: name',[],[]);return say(`Thanks ${S.name}! What's the best WhatsApp number to reach you on?`)}
+const shortText=(t,n=280)=>{if(t.length<=n)return t;const c=t.slice(0,n);const i=Math.max(c.lastIndexOf('. '),c.lastIndexOf('; '));return (i>n*.5?c.slice(0,i):c.replace(/\s+\S*$/,''))+'…'};
+
+/* =====================================================================
+   9. THE BRAIN
+   ===================================================================== */
+const OFFER={wow:'plan',days:'plan',family:'plan',honeymoon:'plan',kolkata:'plan',homestay:'plan',elderly:'plan',solo:'plan',group:'plan',price:'plan'};
+const UNKNOWN=["I don't have a reliable answer to that, and I'd rather not guess 🙏 I can plan a trip, answer questions about the Dooars, or connect you with our team.",
+  "Iska pakka jawab mere paas nahi hai, aur main andaza nahi lagana chahta 🙏 Main trip plan kar sakta hoon, Dooars ke sawaalon ke jawab de sakta hoon, ya hamari team se mila sakta hoon.",
+  "Eta-r nishchit uttor amar kache nei, ar ami andaje bolte chai na 🙏 Ami trip plan korte pari, Dooars somporke proshner uttor dite pari, ba amader team-er sathe jog korate pari."];
+const REASK={en:'Back to your plan:',hi:'Wapas aapke plan par:',bn:'Apnar plan-e phire ashi:'};
+const NOTYET={en:"Got it, no problem 🙂",hi:"Theek hai, koi baat nahi 🙂",bn:"Thik ache, kono byapar na 🙂"};
+
+async function runIntent(it,raw,score,viaChip){
+  const li=LI[S.lang];S.last=it.id;
+  trace(raw,'intent: '+it.id+(score?' ('+score.toFixed(1)+')':''),it.caution?['caution: confirm before booking']:[]);
+  if(it.act==='plan'){S.offer=null;return askNext()}
+  if(it.act==='yes'){
+    if(S.offer==='lead'){S.offer=null;return startLead()}
+    if(S.offer==='budgetdown'){S.offer=null;S.slots.budget='Budget';S.plan=false;renderSlots();return askNext()}
+    if(S.offer==='plan'){S.offer=null;return askNext()}
+    if(S.awaiting){return say(Q[S.awaiting][li],OPT[S.awaiting].map(o=>({label:o[li],set:{[S.awaiting]:o[3]}})))}
+    await say(it.r[S.lang]);return chips([C('plan'),C('besttime'),C('price')]);
+  }
+  if(it.act==='no'){S.offer=null}
+  if(it.act==='lead'){await say(it.r[S.lang]);return startLead()}
+  await say(it.r[S.lang],(it.next||[]).slice(0,4).map(C));
+  if(it.act==='offerlead')S.offer='lead';
+  else if(it.act==='budgetdown')S.offer='budgetdown';
+  else if(OFFER[it.id])S.offer=OFFER[it.id];
+  /* if a planner question was pending, gently bring the customer back to it */
+  if(S.awaiting&&!['emergency','scope'].includes(it.id)){await sleep(400);await say([REASK[S.lang],Q[S.awaiting][li]],OPT[S.awaiting].map(o=>({label:o[li],set:{[S.awaiting]:o[3]}})))}
+}
+
+async function reply(raw,data={}){
+  const n=norm(raw);
+  if(data.reset||/^(start over|restart|reset|new plan|shuru se|phir se|abar shuru|fresh start)$/.test(n)){
+    S.slots={};S.stage='start';S.plan=false;S.awaiting=null;S.offer=null;S.lang='en';setLang('en');renderSlots();trace(raw,'reset');
+    return say(["Fresh start! What would you like to do?","Naye sire se shuru karte hain! Aap kya karna chahenge?","Notun kore shuru kori! Apni ki korte chan?"].slice(0,1),[C('plan'),C('besttime'),C('reach'),C('price')]);
+  }
+  /* chip with a prepared answer */
+  if(data.set){Object.assign(S.slots,data.set);S.plan=false;renderSlots();trace(raw,'chip answer',[Object.keys(data.set).join(',')+'='+Object.values(data.set).join(',')]);
+    const k=Object.keys(data.set)[0],v=data.set[k];
+    let ack=k==='group'||k==='interest'?(ACK[k][v]||[])[LI[S.lang]]:null;
+    if(k==='month'&&isMonsoon(MFULL.indexOf(v)))ack=ACK.monsoon[LI[S.lang]];
+    return askNext(ack);}
+  if(data.redo){delete S.slots[data.redo];S.plan=false;renderSlots();return askNext()}
+  if(data.intent){const it=INTENTS.find(x=>x.id===data.intent);if(it)return runIntent(it,raw,0,true)}
+
+  /* lead capture steps */
+  if(S.stage==='lead_name'){
+    const wc=raw.trim().split(/\s+/).length;
+    if(/\?/.test(raw)||raw.trim().length>40||wc>4){trace(raw,'lead: invalid name',['validate:name']);return say(LS.badname[LI[S.lang]])}
+    S.name=raw.trim().slice(0,60);S.stage='lead_phone';trace(raw,'lead: name captured');return say(LS.phone(S.name)[LI[S.lang]])}
   if(S.stage==='lead_phone'){
-    const digits=raw.replace(/\D/g,'');
-    if(digits.length<8){trace(raw,'lead: invalid phone',['validate:phone'],[]);return say("That doesn't look like a phone number. Could you type it again with the country code?")}
-    const L=getLeads(),sl=S.slots;L.push({name:S.name,phone:raw.trim().slice(0,20),plan:`${sl.days}d ${sl.interest} ${sl.month} ${sl.budget}`,time:new Date().toISOString()});setLeads(L);renderLeads();
-    trace(raw,'lead: saved to sheet',['alert: team notified'],[]);S.stage='plan';
-    return say(`All set, ${S.name}! A human planner will message you on WhatsApp with exact prices and availability. Meanwhile, ask me anything about the Dooars.`,['Change days','Best time to visit?','Start over']);
+    if(raw.replace(/\D/g,'').length<8){trace(raw,'lead: invalid phone',['validate:phone']);return say(LS.badphone[LI[S.lang]])}
+    const sl=S.slots,a=getLeads();a.push({name:S.name,phone:raw.trim().slice(0,20),plan:S.plan?`${sl.days}d ${sl.interest} ${sl.month} ${sl.budget}`:'enquiry',lang:LANGNAME[S.lang],time:new Date().toISOString()});setLeads(a);renderLeads();
+    trace(raw,'lead saved to sheet',['team alerted']);S.stage=S.plan?'plan':'ask';
+    return say(LS.saved(S.name)[LI[S.lang]],[C('besttime'),C('stay'),C('safari')]);
   }
-  const rule=RULES.find(r=>r.rx.test(t));
-  if(rule&&rule.reply){trace(raw,'rule: '+rule.id,[rule.id],[]);return say(rule.reply,['Talk to a human','Plan my trip'])}
-  if(/human|agent|person|call me|talk to|speak to/.test(t)){trace(raw,'handoff: human',['handoff'],[]);return say("Sure, I'm alerting a human planner. In a live setup they get a notification and continue this same chat.",S.plan?['Get a quote']:['Plan my trip'])}
-  if((rule&&rule.action==='lead')||(/quote|book/.test(t)&&S.plan)){
-    if(!S.plan){trace(raw,'planner: need plan first',[],[]);await say("Let's build the plan first so the quote is accurate.");return askNext()}
-    S.stage='lead_name';trace(raw,'lead: start',['no booking promises'],[]);return say("Happy to arrange that. I can't confirm bookings myself, but a human planner will. What's your name?")}
-  if(/^change days$/.test(t)){delete S.slots.days;S.plan=false;renderSlots();return askNext()}
-  if(/^change budget$/.test(t)){delete S.slots.budget;S.plan=false;renderSlots();return askNext()}
-  if(/^(ask another question)$/.test(t)){return say("Of course. Ask me about parks, safaris, getting there, stays, tea gardens, food or local culture.",['Safari & parks','Stays & homestays','Food & culture','Getting there'])}
-  const got=extract(t),keys=Object.keys(got);
-  const planIntent=/\b(plan|itinerary|trip|tour|suggest|schedule)\b/.test(t)&&!/best time/.test(t);
-  const isQ=/\?|^(what|when|where|how|why|which|is|are|can|do|does|should|any|tell me|who)\b/.test(t);
-  if(S.stage!=='ask'||planIntent||!keys.length){
-    const r=retrieve(t.replace(/^(plan my trip)$/,''),3);
-    if(isQ&&!planIntent&&enough(r))return answerRag(raw,r);
-    if(!planIntent&&!keys.length&&!/^(hi|hello|hey|hii|namaste|hola|yes|yes, continue|continue|ok|okay|sure)\b/.test(t)&&enough(r))return answerRag(raw,r);
+
+  /* language, intent, slots */
+  if(!n){const ok=INTENTS.find(x=>x.id==='ok');trace(raw,'emoji or symbol only');return runIntent(ok,raw,0)}
+  const lang=detectLang(raw,n);if(lang)setLang(lang);
+  const m=matchIntent(n),slots=extractSlots(n),keys=Object.keys(slots);
+  const hard=m&&['emergency','scope'].includes(m.it.id);
+  if(hard)return runIntent(m.it,raw,m.score);
+  const planWord=m&&m.it.id==='plan';
+  const strong=m&&m.score>=3,isQ=/\?|^(what|how|when|where|which|why|can|is|are|do|does|kya|kab|kaise|kitna|kitne|koto|kobe|kokhon|kothay|kon|keno|kemon|ki)\b/.test(n);
+  /* is this an answer to the planner's question, or a fresh question that just mentions a slot word? */
+  const takeSlots=keys.length&&(S.awaiting?!(isQ&&strong):(planWord||keys.length>=2||!m||m.score<3));
+  if(takeSlots){
+    Object.assign(S.slots,slots);S.plan=false;renderSlots();trace(raw,'slots understood',[keys.map(k=>k+'='+slots[k]).join(', ')]);
+    let ack=null;if(slots.group&&ACK.group[slots.group])ack=ACK.group[slots.group][LI[S.lang]];
+    if(slots.month&&isMonsoon(MFULL.indexOf(slots.month)))ack=ACK.monsoon[LI[S.lang]];
+    return askNext(ack);
   }
-  if(keys.length||planIntent||/^(yes|yes, continue|continue|ok|okay|sure)$/.test(t)){
-    if(keys.length){Object.assign(S.slots,got);S.plan=false;renderSlots();trace(raw,'planner: extract',[keys.map(k=>k+'='+got[k]).join(', ')],[])}
-    return askNext();
+  if(m){
+    /* a bare yes/ok while a planner question is open is not an answer */
+    if(S.awaiting&&['yes','ok'].includes(m.it.id)){return say(Q[S.awaiting][LI[S.lang]],OPT[S.awaiting].map(o=>({label:o[LI[S.lang]],set:{[S.awaiting]:o[3]}})))}
+    return runIntent(m.it,raw,m.score);
   }
-  if(/^(hi|hello|hey|hii|namaste|hola)\b/.test(t)||S.stage==='start'){S.stage='ask';trace(raw,'greeting',[],[]);return welcome()}
-  if(S.awaiting){trace(raw,'planner: re-ask',[],[]);await say("Sorry, I didn't catch that. Pick an option or type it in your own words.");return chips(Q[S.awaiting][1])}
-  trace(raw,'fallback: no confident match',['honest-fallback','handoff offered'],retrieve(t,2).hits);
-  return say("I don't have a reliable answer for that in my notes, and I'd rather not guess. I can plan a trip, answer questions on parks, travel, stays and culture, or connect you to a human.",['Plan my trip','Safari & parks','Talk to a human']);
+  if(S.awaiting){trace(raw,'planner: re-ask');await say({en:"Sorry, I didn't catch that. Tap an option or type it in your own words.",hi:"Maaf kijiye, samajh nahi aaya. Option chunein ya apne shabdon mein likhein.",bn:"Dukkhito, bujhte parlam na. Option bachun ba nijer bhashay likhun."}[S.lang]);
+    return chips(OPT[S.awaiting].map(o=>({label:o[LI[S.lang]],set:{[S.awaiting]:o[3]}})))}
+  /* English long-tail: answer from the sourced facts, in a human voice, with no source talk */
+  if(S.lang==='en'){const r=retrieve(raw);
+    if(r){trace(raw,'fallback: fact base',[],'chunk '+r.c.id+' · '+r.c.ctx+' · '+(r.c.src[0]?r.c.src[0].l+' '+r.c.src[0].u:''));
+      const warn=['conflict','unverified','old','operator'].includes(r.c.kind);
+      return say([`Here's what I know about ${r.c.ctx.replace(/\s*\([^)]*\)/,'')}:`,shortText(r.c.text)+(warn?" (Details can differ, so I'd confirm before you rely on it.)":'')],[C('plan'),C('human')])}}
+  trace(raw,'fallback: no confident match',['honest fallback','handoff offered']);
+  return say(UNKNOWN[LI[S.lang]],[C('plan'),C('human')]);
 }
+
 async function welcome(){
-  await typing(600);
-  const d=addCard(`<div class="lead">Namaste! 👋 I'm the Dooars trip assistant.</div><div>I plan trips and answer questions from a sourced research dossier, and I tell you when something is uncertain. What can I help with?</div>
-   <div class="tiles"><button class="tile" data-go="Plan my trip"><span>🗺️</span><b>Plan my trip</b><small>Day-by-day in a minute</small></button>
-   <button class="tile" data-go="Best time to visit?"><span>🌤️</span><b>Best time</b><small>Seasons & closures</small></button>
-   <button class="tile" data-go="How to reach Dooars?"><span>🚆</span><b>Getting there</b><small>Train, flight, road</small></button>
-   <button class="tile" data-go="Safari and parks"><span>🦏</span><b>Safari & parks</b><small>Gorumara, Jaldapara, Buxa</small></button></div>`);
-  d.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>send(b.dataset.go));
-  chips(['Stays & homestays','Food & culture','Talk to a human']);
+  await typing(700);
+  const d=addCard(`<div class="lead">Namaste! 👋 I'm the Dooars trip assistant.</div><div>I plan trips and answer questions about parks, stays, travel and costs. You can write in English, <b>Hindi</b> or <b>Bangla</b> (Roman or script), whichever is easiest 🙂</div>
+   <div class="tiles"><button class="tile" data-i="plan"><span>🗺️</span><b>Plan my trip</b><small>Day-by-day in a minute</small></button>
+   <button class="tile" data-i="besttime"><span>🌤️</span><b>Best time</b><small>Seasons & monsoon</small></button>
+   <button class="tile" data-i="reach"><span>🚆</span><b>Getting there</b><small>Train, flight, road</small></button>
+   <button class="tile" data-i="safari"><span>🦏</span><b>Safari</b><small>Gorumara, Jaldapara</small></button></div>`);
+  d.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>send(b.querySelector('b').textContent,{intent:b.dataset.i}));
+  chips([C('stay'),C('price'),C('human')]);
 }
-const ALIAS={'safari & parks':'safari parks Gorumara Jaldapara Buxa','stays & homestays':'stay homestay lodge resort Dooars','food & culture':'food cuisine tribal culture festival','getting there':'reach train airport station Dooars','best time to visit?':'best time season monsoon closure','how to reach dooars?':'reach train airport station Dooars','safari and parks':'safari parks Gorumara Jaldapara Buxa'};
 let busy=false;
-async function send(text){
-  text=text.trim();if(!text||busy)return;busy=true;clearChips();addMsg(text,'out');inp.value='';
+async function send(text,data){
+  text=(text||'').trim();if(!text||busy)return;busy=true;clearChips();addMsg(text,'out');inp.value='';
   document.body.classList.remove('sheet');
-  try{const a=ALIAS[text.toLowerCase()];await reply(a?a:text,!!a)}catch(e){console.error(e);addMsg('Something went wrong. Please try again.','in')}
+  try{await reply(text,data||{})}catch(e){console.error(e);addMsg('Something went wrong. Please try again.','in')}
   busy=false;inp.focus();
 }
 $('#form').addEventListener('submit',e=>{e.preventDefault();send(inp.value)});
 renderSlots();renderLeads();renderKb();renderTrace();
-S.stage='start';welcome();
+setLang('en');welcome();
