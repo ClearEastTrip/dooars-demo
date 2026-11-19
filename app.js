@@ -127,7 +127,7 @@ function renderTrace(){$('#p-trace').innerHTML=traces.slice(0,8).map(t=>`<div cl
 function renderKb(){
   const by={};KB.forEach(c=>by[c.topic]=(by[c.topic]||0)+1);
   $('#p-kb').innerHTML=`<div class="stat"><div><b>${INTENTS.length}</b><small>question types</small></div><div><b>3</b><small>languages</small></div><div><b>${KB.length}</b><small>sourced facts</small></div></div>
-  <p class="empty">Customers can write in English, Hinglish (Roman Hindi), Banglish (Roman Bengali), or Hindi and Bangla script. The bot answers in the same language. Curated answers come first; the sourced fact base (from the research dossier) backs up English questions. Sources appear here, never in the chat.</p>`;
+  <p class="empty">Customers can write in English, Banglish (Roman Bengali), Hinglish (Roman Hindi), or Bangla and Hindi script. The bot answers in the same language. Curated answers come first; the sourced fact base (from the research dossier) backs up English questions. Sources appear here, never in the chat.</p>`;
 }
 function setLang(l){if(!l||l===S.lang&&$('#langPill').dataset.l===l)return;S.lang=l;const p=$('#langPill');p.dataset.l=l;p.textContent=LANGNAME[l]}
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.setAttribute('aria-selected',x===b));document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='p-'+b.dataset.tab))});
@@ -346,7 +346,7 @@ async function reply(raw,data={}){
 
 async function welcome(){
   await typing(700);
-  const d=addCard(`<div class="lead">Namaste! 👋 I'm the Dooars trip assistant.</div><div>I plan trips and answer questions about parks, stays, travel and costs. You can write in English, <b>Hindi</b> or <b>Bangla</b> (Roman or script), whichever is easiest 🙂</div>
+  const d=addCard(`<div class="lead">Hello! 👋 Nomoskar · Namaste</div><div>I'm the Dooars trip assistant.</div><div>I plan trips and answer questions about parks, stays, travel and costs. You can write in English, <b>Bangla</b> or <b>Hindi</b> (Roman or script), whichever is easiest 🙂</div>
    <div class="tiles"><button class="tile" data-i="plan"><span>🗺️</span><b>Plan my trip</b><small>Day-by-day in a minute</small></button>
    <button class="tile" data-i="besttime"><span>🌤️</span><b>Best time</b><small>Seasons & monsoon</small></button>
    <button class="tile" data-i="reach"><span>🚆</span><b>Getting there</b><small>Train, flight, road</small></button>
