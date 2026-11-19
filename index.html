@@ -3,255 +3,54 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Demo of a WhatsApp-style trip assistant for the Dooars, answering from a sourced knowledge base.">
 <title>Dooars Trip Assistant Demo</title>
-<style>
-:root{--bg:#0b141a;--panel:#111b21;--line:#222d34;--text:#e9edef;--muted:#8696a0;--out:#005c4b;--in:#202c33;--accent:#25d366;--wa-bg:#0b141a}
-*{box-sizing:border-box;margin:0}
-body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#0a0f12;color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;gap:28px}
-.phone{width:390px;max-width:100%;height:min(780px,calc(100vh - 32px));background:var(--wa-bg);border-radius:28px;border:8px solid #1c262c;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px #0008}
-.head{background:#202c33;padding:10px 14px;display:flex;align-items:center;gap:10px}
-.avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#2e7d32,#81c784);display:grid;place-items:center;font-size:18px}
-.head b{display:block;font-size:15px}.head small{color:var(--muted);font-size:12px}
-.chat{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:6px;background:radial-gradient(circle at 20% 10%,#12202a,#0b141a 60%)}
-.msg{max-width:84%;padding:7px 10px 6px;border-radius:9px;font-size:14.5px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word;animation:pop .18s ease-out}
-.msg.in{background:var(--in);align-self:flex-start;border-top-left-radius:2px}
-.msg.out{background:var(--out);align-self:flex-end;border-top-right-radius:2px}
-.msg time{display:block;text-align:right;font-size:10.5px;color:var(--muted);margin-top:2px}
-.typing{align-self:flex-start;background:var(--in);padding:10px 14px;border-radius:9px;display:flex;gap:4px}
-.typing i{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:b 1s infinite}
-.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
-.chips{display:flex;flex-wrap:wrap;gap:6px;align-self:flex-start;max-width:92%}
-.chip{background:transparent;border:1px solid var(--accent);color:var(--accent);padding:6px 12px;border-radius:16px;font-size:13px;cursor:pointer}
-.chip:hover{background:#25d36622}
-.bar{display:flex;gap:8px;padding:8px;background:#202c33}
-.bar input{flex:1;border:0;border-radius:20px;padding:10px 14px;background:#2a3942;color:var(--text);font-size:15px;outline:none}
-.bar button{border:0;border-radius:50%;width:42px;height:42px;background:var(--accent);color:#06281a;font-size:18px;cursor:pointer}
-.side{width:420px;max-width:100%;display:flex;flex-direction:column;gap:14px;max-height:calc(100vh - 32px);overflow-y:auto}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
-.card h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;font-weight:600}
-.title h1{font-size:22px;margin-bottom:6px}.title p{color:var(--muted);font-size:14px;line-height:1.5}
-.tag{display:inline-block;background:#25d36622;color:var(--accent);font-size:11px;padding:2px 8px;border-radius:10px;margin-bottom:8px}
-.slots{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
-.slot{background:#0b141a;border:1px solid var(--line);border-radius:8px;padding:6px;text-align:center;font-size:11px;color:var(--muted)}
-.slot b{display:block;color:var(--text);font-size:13px;margin-top:2px;min-height:17px}
-.slot.on{border-color:var(--accent)}
-.log{font:12px ui-monospace,Consolas,monospace;color:#9fb3bd;max-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:3px}
-.log div b{color:var(--accent)}
-table{width:100%;border-collapse:collapse;font-size:12.5px}
-th,td{text-align:left;padding:6px 6px;border-bottom:1px solid var(--line)}
-th{color:var(--muted);font-weight:500}
-.empty{color:var(--muted);font-size:13px}
-.btns{display:flex;gap:8px;margin-top:10px}
-.btns button{background:#202c33;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer}
-.toggle{display:none}
-@keyframes pop{from{transform:scale(.96);opacity:0}to{transform:none;opacity:1}}
-@keyframes b{0%,60%,100%{transform:none}30%{transform:translateY(-4px)}}
-@media(max-width:900px){body{padding:0;display:block}.phone{width:100%;height:100vh;border-radius:0;border:0}.side{display:none;max-height:none;padding:12px}body.show .side{display:flex}body.show .phone{display:none}.toggle{display:block;position:fixed;top:10px;right:10px;z-index:9;background:#2a3942;color:var(--text);border:0;border-radius:14px;padding:6px 10px;font-size:11px}}
-</style>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<button class="toggle" onclick="document.body.classList.toggle('show')">Behind the scenes</button>
 
-<div class="phone">
-  <div class="head"><div class="avatar">🐘</div><div><b>Dooars Trip Assistant</b><small>demo bot · replies instantly</small></div></div>
-  <div class="chat" id="chat"></div>
-  <form class="bar" id="form"><input id="inp" placeholder="Type a message" autocomplete="off"><button aria-label="Send">➤</button></form>
-</div>
+<main class="phone" aria-label="Chat with the Dooars trip assistant">
+  <header class="head">
+    <div class="avatar" aria-hidden="true">🐘</div>
+    <div class="who"><b>Dooars Trip Assistant</b><small><span class="dot"></span>online · answers from sourced notes</small></div>
+    <button class="iconbtn toggle" id="sheetBtn" aria-label="Open behind the scenes" title="Behind the scenes">⚙</button>
+    <button class="iconbtn" id="menuBtn" aria-label="Menu" aria-haspopup="true" aria-expanded="false">⋮</button>
+    <div class="menu" id="menu" role="menu">
+      <button role="menuitem" data-act="restart">↺ Start over</button>
+      <button role="menuitem" data-act="plan">🗺 Plan my trip</button>
+      <button role="menuitem" data-act="human">🙋 Talk to a human</button>
+    </div>
+  </header>
+  <div class="progress" aria-hidden="true"><i id="prog"></i></div>
+  <div class="chat" id="chat" role="log" aria-live="polite" aria-label="Conversation"></div>
+  <form class="bar" id="form">
+    <input id="inp" placeholder="Ask about the Dooars…" autocomplete="off" aria-label="Type a message" maxlength="300">
+    <button aria-label="Send">➤</button>
+  </form>
+</main>
 
-<div class="side">
-  <div class="card title"><span class="tag">DEMO</span><h1>WhatsApp trip automation</h1>
-    <p>A traveller says hi, the bot asks a few questions, builds a day-by-day Dooars plan and captures the lead. This panel shows what happens behind the scenes. Prices and rules here are sample data for the demo only.</p></div>
-  <div class="card"><h2>What the bot understood</h2><div class="slots" id="slots"></div></div>
-  <div class="card"><h2>Automation log</h2><div class="log" id="log"><div class="empty">Waiting for the first message…</div></div></div>
-  <div class="card"><h2>Leads sheet (saved automatically)</h2><div id="leads"></div>
-    <div class="btns"><button onclick="exportCsv()">Download CSV</button><button onclick="clearLeads()">Clear</button></div></div>
-</div>
+<aside class="side" id="side" aria-label="Behind the scenes">
+  <div class="card">
+    <span class="tag">DEMO</span>
+    <h1>How the automation works</h1>
+    <p>A traveller says hi. The bot asks a few questions, builds a plan, answers from a sourced knowledge base (small chunks, searched live), applies safety rules, and saves the lead. Prices here are indicative, not quotes.</p>
+  </div>
+  <div class="card">
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-tab="trace">How it answered</button>
+      <button role="tab" aria-selected="false" data-tab="slots">Understood</button>
+      <button role="tab" aria-selected="false" data-tab="leads">Leads</button>
+      <button role="tab" aria-selected="false" data-tab="kb">Knowledge</button>
+    </div>
+    <div class="pane on" id="p-trace"><div class="empty">Ask something and see which knowledge chunks were retrieved and which rules fired.</div></div>
+    <div class="pane" id="p-slots"><div class="slots" id="slots"></div></div>
+    <div class="pane" id="p-leads"><div id="leads"></div>
+      <div class="btns"><button onclick="exportCsv()">Download CSV</button><button onclick="clearLeads()">Clear</button></div></div>
+    <div class="pane" id="p-kb"></div>
+  </div>
+</aside>
 
-<script>
-const $=s=>document.querySelector(s);
-const chat=$('#chat'),inp=$('#inp');
-const S={slots:{},stage:'start',awaiting:null,plan:false,name:''};
-const ORDER=['days','group','interest','month','budget'];
-const LABEL={days:'Days',group:'Who',interest:'Interest',month:'Month',budget:'Budget'};
-const RATE={budget:[2500,3500],comfort:[4000,6000],premium:[7000,10000]};
-const MONTHS=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
-const MFULL=['January','February','March','April','May','June','July','August','September','October','November','December'];
-const WORDS={one:1,two:2,three:3,four:4,five:5,six:6,seven:7};
-
-/* ---------- helpers ---------- */
-const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-const fmt=s=>esc(s).replace(/\*([^*\n]+)\*/g,'<b>$1</b>');
-const now=()=>new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const inr=n=>'₹'+n.toLocaleString('en-IN');
-function scroll(){chat.scrollTop=chat.scrollHeight}
-function addMsg(t,who){const d=document.createElement('div');d.className='msg '+who;d.innerHTML=fmt(t)+'<time>'+now()+'</time>';chat.appendChild(d);scroll()}
-function clearChips(){document.querySelectorAll('.chips').forEach(e=>e.remove())}
-function chips(list){if(!list||!list.length)return;const c=document.createElement('div');c.className='chips';list.forEach(t=>{const b=document.createElement('button');b.className='chip';b.type='button';b.textContent=t;b.onclick=()=>send(t);c.appendChild(b)});chat.appendChild(c);scroll()}
-function log(t){const l=$('#log');if(l.querySelector('.empty'))l.innerHTML='';const d=document.createElement('div');d.innerHTML='<b>→</b> '+esc(t);l.appendChild(d);l.scrollTop=l.scrollHeight}
-function renderSlots(){$('#slots').innerHTML=ORDER.map(k=>{const v=S.slots[k];return `<div class="slot ${v?'on':''}">${LABEL[k]}<b>${v?esc(String(v)):'–'}</b></div>`}).join('')}
-async function say(lines,chipList){
-  for(const t of [].concat(lines)){
-    const ty=document.createElement('div');ty.className='typing';ty.innerHTML='<i></i><i></i><i></i>';chat.appendChild(ty);scroll();
-    await sleep(500+Math.min(900,t.length*4));ty.remove();addMsg(t,'in');
-  }
-  chips(chipList);
-}
-
-/* ---------- facts (DEMO data) ---------- */
-const DAYS={
- gorumara:{t:'Gorumara & Lataguri',d:'Morning jeep safari in Gorumara National Park (rhino, elephant, gaur, birds). Afternoon at the Chapramari watchtower and a picnic by the Murti river.'},
- jaldapara:{t:'Jaldapara & Hollong',d:'Early safari in Jaldapara for the one-horned rhino (elephant or jeep safari, subject to availability). Slow evening at Hollong forest lodge area.'},
- samsing:{t:'Samsing & Suntalekhola',d:'Drive up through tea gardens to Samsing and Suntalekhola. Short forest walks, river views, Rocky Island and sunset over the hills.'},
- jayanti:{t:'Jayanti & Buxa',d:'Buxa Tiger Reserve side: Jayanti river bed, forest trails and the Buxa Fort viewpoint trek (moderate).'},
- tea:{t:'Tea gardens & villages',d:'Walk through a working tea estate near Chalsa, meet local families, try garden-fresh tea and a village lunch.'},
- border:{t:'Bhutan border day',d:'Day trip to the Jaigaon-Phuentsholing gate for a look at the border town and market (carry valid ID; check current rules).'},
- birds:{t:'Birding morning',d:'Dawn birdwatching around Rasikbil or the Murti river banks, then a relaxed afternoon.'}
-};
-const SEQ={
- wildlife:['gorumara','jaldapara','jayanti','samsing','birds'],
- nature:['tea','samsing','jayanti','gorumara','jaldapara'],
- offbeat:['samsing','jayanti','border','gorumara','jaldapara']
-};
-const MONSOON=m=>m>=5&&m<=8;
-const FAQ=[
- [/best time|when (to|should).*(go|visit)|season|peak/,"*Best time:* October to April is the sweet spot (cool, clear, best safari sightings). March-April is great for birds. The monsoon is lush and green, but the main national parks are usually closed from about mid-June to mid-September. Confirm dates before booking."],
- [/monsoon|rain|closed|open.*(park|gorumara|jaldapara)/,"Gorumara and Jaldapara usually close from about mid-June to mid-September for the monsoon. Tea gardens, rivers and villages stay open, so I can plan around that. Always confirm park dates before booking."],
- [/reach|how to get|airport|station|train|flight|bagdogra|njp/,"Easiest gateways: *Bagdogra airport* or *New Jalpaiguri (NJP)* station, then a 2.5 to 3 hour drive to the Dooars. Hasimara and Alipurduar stations are closer for the eastern Dooars."],
- [/safari|jeep|elephant ride/,"Gorumara and Jaldapara run jeep safaris, and Jaldapara also offers elephant safaris. Slots are limited and booked through the forest department, so book early in peak season."],
- [/permit|\bid\b|ticket|entry/,"Carry a valid photo ID for safari bookings and for any Bhutan border visit. Foreign nationals may need extra permits. Rules change, so check current requirements."],
- [/bhutan|jaigaon|phuentsholing/,"Jaigaon (India) and Phuentsholing (Bhutan) are about a day trip from the eastern Dooars. Indian visitors usually need a valid ID for the border area. Going further into Bhutan needs a permit."],
- [/stay|hotel|resort|homestay|lodge|food|eat/,"Options: forest lodges, tea-garden bungalows, homestays and resorts around Lataguri, Chalsa and Jaldapara. Expect Bengali and tea-garden home cooking, with veg and non-veg available."],
- [/price|cost|how much|expensive|rate/,`Sample estimates per person per day (stay, meals, local travel, safari fees extra): *Budget* ${inr(2500)}-${inr(3500)}, *Comfort* ${inr(4000)}-${inr(6000)}, *Premium* ${inr(7000)}+. These are demo numbers.`],
- [/who are you|are you (a )?(bot|ai|human|real)|your name/,"I'm a demo trip assistant showing how WhatsApp automation can answer travellers instantly. A real version would hand over to a human planner anytime."]
-];
-
-/* ---------- extraction ---------- */
-function extract(t){
-  const got={};
-  let m=t.match(/\b(\d{1,2})\s*[- ]?\s*(day|days|night|nights)\b/);
-  if(m){let n=+m[1];if(/night/.test(m[2]))n+=1;got.days=n}
-  else{m=t.match(/\b(one|two|three|four|five|six|seven)\s*[- ]?\s*(day|days|night|nights)\b/);if(m){let n=WORDS[m[1]];if(/night/.test(m[2]))n+=1;got.days=n}}
-  if(!got.days&&/weekend/.test(t))got.days=2;
-  if(!got.days&&S.awaiting==='days'){m=t.match(/^\s*(\d{1,2})\s*$/);if(m)got.days=+m[1]}
-  if(got.days&&(got.days<1||got.days>7))got.days=Math.min(7,Math.max(1,got.days));
-  if(/family|kids?|child|parents/.test(t))got.group='Family';
-  else if(/couple|honeymoon|wife|husband|partner|romantic/.test(t))got.group='Couple';
-  else if(/friends|gang|\bgroup\b/.test(t))got.group='Friends';
-  else if(/solo|alone|myself/.test(t))got.group='Solo';
-  if(/wildlife|safari|animal|rhino|elephant|bird/.test(t))got.interest='Wildlife';
-  else if(/nature|tea|relax|peace|river|scenic|chill/.test(t))got.interest='Nature';
-  else if(/offbeat|adventure|trek|village|explore|bhutan/.test(t))got.interest='Offbeat';
-  const mi=MONTHS.findIndex(x=>new RegExp('\\b'+x+'[a-z]*\\b').test(t)&&(x!=='may'||S.awaiting==='month'));
-  if(mi>=0)got.month=MFULL[mi];
-  else if(/winter/.test(t))got.month='December';else if(/summer/.test(t))got.month='May';else if(/monsoon/.test(t)&&S.awaiting==='month')got.month='July';
-  if(/budget|cheap|economy|affordable/.test(t))got.budget='Budget';
-  else if(/comfort|mid|standard|moderate/.test(t))got.budget='Comfort';
-  else if(/premium|luxury|high-end|resort/.test(t))got.budget='Premium';
-  return got;
-}
-
-/* ---------- plan ---------- */
-function buildPlan(){
-  const {days,group,interest,month,budget}=S.slots;
-  const mIdx=MFULL.indexOf(month);
-  let seq=SEQ[interest.toLowerCase()].slice();
-  const warn=MONSOON(mIdx);
-  if(warn)seq=seq.filter(k=>k!=='gorumara'&&k!=='jaldapara');
-  if(warn)seq=seq.concat(['tea','birds']).filter((v,i,a)=>a.indexOf(v)===i);
-  const out=[`Here's a *${days}-day Dooars plan* for ${group.toLowerCase()==='solo'?'a solo trip':group.toLowerCase()}, ${interest.toLowerCase()} focus, in ${month}:`];
-  const lines=[];
-  for(let i=0;i<days;i++){
-    const b=DAYS[seq[i%seq.length]];
-    let txt=`*Day ${i+1}: ${b.t}*\n`;
-    if(i===0)txt+='Arrive at Bagdogra/NJP and drive 2.5-3 hrs to the Dooars. Check in, rest. ';
-    txt+=b.d;
-    if(i===days-1&&days>1)txt+='\nLate morning: check out and head to the station or airport.';
-    lines.push(txt);
-  }
-  const [lo,hi]=RATE[budget.toLowerCase()];
-  let cost=`*Rough cost:* ${inr(lo*days)}-${inr(hi*days)} per person (${budget.toLowerCase()}, stay, meals and local travel; safari fees and transport to Bagdogra/NJP extra). Demo estimate.`;
-  if(warn)cost+='\n\n*Heads-up:* the main national parks are usually closed in the monsoon, so I have planned around them.';
-  if(group==='Family')cost+='\n\nFamily tip: I would keep drives under 3 hours a day and add a kid-friendly stop.';
-  return {intro:out[0],lines,cost};
-}
-
-/* ---------- questions ---------- */
-const Q={
- days:['How many days do you have?',['2 days','3 days','4 days','5 days']],
- group:['Who is travelling?',['Family','Couple','Friends','Solo']],
- interest:['What do you enjoy most?',['Wildlife & safari','Nature & tea gardens','Offbeat & adventure']],
- month:['Which month are you thinking of?',['November','December','March','July']],
- budget:['What budget feels right?',['Budget','Comfort','Premium']]
-};
-async function askNext(){
-  const miss=ORDER.find(k=>!S.slots[k]);
-  if(miss){S.awaiting=miss;S.stage='ask';log('Asking next question: '+miss);await say(Q[miss][0],Q[miss][1]);return}
-  S.awaiting=null;S.stage='plan';S.plan=true;
-  log('All details collected, generating itinerary');
-  const p=buildPlan();
-  await say(p.intro);for(const l of p.lines)await say(l);
-  await say(p.cost,['Get a quote','Change days','Change budget','Best time to visit?']);
-}
-
-/* ---------- leads ---------- */
-let memLeads=null;
-const getLeads=()=>{if(memLeads)return memLeads;try{return JSON.parse(localStorage.getItem('dooarsLeads')||'[]')}catch(e){return[]}};
-const setLeads=a=>{memLeads=a;try{localStorage.setItem('dooarsLeads',JSON.stringify(a))}catch(e){}};
-function renderLeads(){
-  const a=getLeads();
-  $('#leads').innerHTML=a.length?'<table><tr><th>Name</th><th>Phone</th><th>Plan</th></tr>'+a.map(l=>`<tr><td>${esc(l.name)}</td><td>${esc(l.phone)}</td><td>${esc(l.plan)}</td></tr>`).join('')+'</table>':'<div class="empty">No leads yet. Ask the bot for a quote to see one appear here.</div>';
-}
-function exportCsv(){
-  const a=getLeads();const csv='name,phone,plan,time\n'+a.map(l=>[l.name,l.phone,l.plan,l.time].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
-  const u=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const x=document.createElement('a');x.href=u;x.download='leads.csv';x.click();URL.revokeObjectURL(u);
-}
-function clearLeads(){setLeads([]);renderLeads()}
-
-/* ---------- brain ---------- */
-async function reply(raw){
-  const t=raw.toLowerCase().trim();
-  log('Message received: "'+raw.slice(0,40)+'"');
-  if(/^(restart|start over|reset|new plan)$/.test(t)){S.slots={};S.stage='start';S.plan=false;renderSlots();return say("No problem, fresh start! Where shall we begin?",['Plan my trip','Best time to visit?'])}
-  if(S.stage==='lead_name'){S.name=raw.trim().slice(0,60);S.stage='lead_phone';return say(`Thanks ${S.name}! What's the best WhatsApp number to reach you on?`)}
-  if(S.stage==='lead_phone'){
-    const digits=raw.replace(/\D/g,'');
-    if(digits.length<8)return say("That doesn't look like a phone number. Could you type it again with the country code?");
-    const L=getLeads();const sl=S.slots;
-    L.push({name:S.name,phone:raw.trim().slice(0,20),plan:`${sl.days}d ${sl.interest} ${sl.month} ${sl.budget}`,time:new Date().toISOString()});setLeads(L);renderLeads();
-    log('Lead saved to sheet; team alerted');S.stage='plan';
-    return say(`All set, ${S.name}! A human planner will message you on WhatsApp with exact prices and availability. Want to tweak the plan meanwhile?`,['Change days','Change budget','Restart']);
-  }
-  if(/human|agent|person|call me|talk to/.test(t)){log('Human handoff requested; team alerted');return say("Sure, I'm alerting a human planner. In a live setup they get a notification and continue this same chat.",S.plan?['Get a quote']:null)}
-  if(/quote|book|confirm|send me.*price/.test(t)&&S.plan){S.stage='lead_name';log('Starting lead capture');return say("Happy to arrange that. What's your name?")}
-  if(/quote|book/.test(t)&&!S.plan){return say("Let's build the plan first so the quote is accurate.").then(askNext)}
-  if(/^change days$/.test(t)){delete S.slots.days;S.plan=false;renderSlots();return askNext()}
-  if(/^change budget$/.test(t)){delete S.slots.budget;S.plan=false;renderSlots();return askNext()}
-  const got=extract(t);const keys=Object.keys(got);
-  const faq=FAQ.find(f=>f[0].test(t));
-  const planIntent=/plan|itinerary|trip|tour|package|suggest|schedule/.test(t);
-  if(faq&&!keys.length&&!planIntent){log('FAQ answered from approved facts');await say(faq[1]);return S.stage==='ask'?say('Shall we continue with your plan?',['Yes, continue']).then(()=>{}):null}
-  if(keys.length){Object.assign(S.slots,got);renderSlots();log('Extracted: '+keys.map(k=>k+'='+got[k]).join(', '));if(S.plan){S.plan=false}return askNext()}
-  if(planIntent||/^(yes|yes, continue|continue|ok|okay|sure)$/.test(t)){return askNext()}
-  if(/^(hi|hello|hey|hii|namaste|hola)\b/.test(t)||S.stage==='start'){
-    S.stage='ask';
-    return say(["Hi! 👋 I'm the Dooars trip assistant. I can plan your trip to the forests, rhinos and tea gardens of North Bengal's Dooars.","Try *\"3 day plan for Dooars\"* or tap below."],['Plan my trip','Best time to visit?','How to reach?','Talk to a human']);
-  }
-  if(S.awaiting){return say("Sorry, I didn't catch that. Please pick one of the options or type it in your own words.").then(()=>chips(Q[S.awaiting][1]))}
-  log('No match, offering human handoff');
-  return say("I'm not sure about that one. I can plan a trip, answer common Dooars questions, or connect you to a human.",['Plan my trip','Talk to a human']);
-}
-
-let busy=false;
-async function send(text){
-  text=text.trim();if(!text||busy)return;busy=true;clearChips();addMsg(text,'out');inp.value='';
-  try{await reply(text)}catch(e){console.error(e);addMsg('Something went wrong. Please try again.','in')}
-  busy=false;
-}
-$('#form').addEventListener('submit',e=>{e.preventDefault();send(inp.value)});
-renderSlots();renderLeads();
-say("Hi! 👋 I'm the Dooars trip assistant. Say hi or tell me what you're looking for.",['Hi','3 day plan for Dooars','Best time to visit?']);
-S.stage='start';
-</script>
+<script src="kb.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
