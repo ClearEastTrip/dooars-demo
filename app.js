@@ -166,11 +166,11 @@ const OPT={
   month:[['November','November','November','November'],['December','December','December','December'],['March','March','March','March'],['July','July','July','July']],
   budget:[['Budget','Budget','Budget','Budget'],['Comfort','Comfort','Comfort','Comfort'],['Premium','Premium','Premium','Premium']]};
 const ACK={
-  group:{Family:['Lovely, a family trip! 👨‍👩‍👧','Waah, family trip! 👨‍👩‍👧','Darun, family trip! 👨‍👩‍👧'],Couple:['Nice, a trip for two! 💚','Waah, do logon ka trip! 💚','Darun, dujoner trip! 💚'],
-    Friends:["Fun, a friends' trip! 🎉",'Maza aayega, dosto ka trip! 🎉','Moja hobe, bondhu-der trip! 🎉'],Solo:['Great, solo trips here feel very peaceful 🌿','Badhiya, yahan solo trip bahut shaant lagti hai 🌿','Darun, ekhane solo trip khub shanto 🌿']},
-  interest:{Wildlife:['Great pick, the Dooars is famous for rhinos and elephants 🦏','Badhiya, Dooars rhino aur haathiyon ke liye mashhoor hai 🦏','Darun, Dooars rhino ar hati-r jonno bikhyato 🦏'],
-    Nature:['Lovely, tea gardens and rivers it is 🍵','Achha, chai bagan aur nadiyan 🍵','Bhalo, chaa-bagan ar nodi 🍵'],Offbeat:['Nice, we will keep it quiet and adventurous 🥾','Achha, shaant aur adventurous rakhenge 🥾','Bhalo, shanto ar adventurous rakhbo 🥾']},
-  monsoon:['Just so you know, the main parks are usually closed in the rains, but I will plan around it 🌧️','Dhyan rahe, barish mein bade parks aam taur par band rehte hain, par main us hisaab se plan karunga 🌧️','Mone rakhben, borsha-y boro park gulo sadharonoto bondho thake, tobe ami sei onujayi plan korbo 🌧️']};
+  group:{Family:['Noted, a family trip.','Theek hai, family trip.','Thik ache, family trip.'],Couple:['Noted, a trip for two.','Theek hai, do logon ka trip.','Thik ache, dujoner trip.'],
+    Friends:['Noted, a trip with friends.','Theek hai, dosto ke saath trip.','Thik ache, bondhu-der sathe trip.'],Solo:['Noted, a solo trip.','Theek hai, akele ka trip.','Thik ache, ekla trip.']},
+  interest:{Wildlife:['An excellent choice; the Dooars is well known for rhinos and elephants.','Achha chunav; Dooars rhino aur haathiyon ke liye jaana jaata hai.','Bhalo pochondo; Dooars rhino ar hati-r jonno bikhyato.'],
+    Nature:['Understood, tea gardens and rivers.','Theek hai, chai bagan aur nadiyan.','Thik ache, chaa-bagan ar nodi.'],Offbeat:['Understood, a quiet and adventurous plan.','Theek hai, shaant aur adventurous plan.','Thik ache, shanto ar adventurous plan.']},
+  monsoon:['Please note that the main parks are usually closed during the rains. I will plan around this.','Kripya dhyan dein, barish mein bade parks aam taur par band rehte hain. Main plan usi ke anusaar banaunga.','Mone rakhben, borsha-y boro park gulo sadharonoto bondho thake. Ami sei onujayi plan korbo.']};
 const DAYS={
  gorumara:{t:['Gorumara & Lataguri','Gorumara aur Lataguri','Gorumara ar Lataguri'],d:['Morning jeep safari in Gorumara. Afternoon by the Murti river and the watchtowers.','Subah Gorumara mein jeep safari. Dopahar mein Murti nadi aur watchtowers.','Sokale Gorumara-y jeep safari. Dupure Murti nodi ar watchtower.']},
  jaldapara:{t:['Jaldapara & Hollong','Jaldapara aur Hollong','Jaldapara ar Hollong'],d:['Early safari in Jaldapara, famous for the one-horned rhino. Slow evening around Hollong.','Subah Jaldapara mein safari, ek-singh wale rhino ke liye mashhoor. Shaam Hollong mein aaram.','Bhore Jaldapara-y safari, ek-shringo rhino-r jonno bikhyato. Sondhye Hollong-e bishram.']},
@@ -192,7 +192,7 @@ const SX={
   fam:['Family tip: keep drives under about 3 hours a day and add one kid-friendly stop.','Family tip: din mein 3 ghante se kam drive rakhein aur ek bachchon ke layak jagah jodein.','Family tip: diney 3 ghontar kom gari rakhun ar ekta bachchader upojogi jayga jurun.'],
   share:['Share on WhatsApp','WhatsApp par share karein','WhatsApp-e share korun'],
   pre:(d,g,i,m)=>[`My ${d}-day Dooars plan (${g}, ${i}, ${m}):`,`Mera ${d} din ka Dooars plan (${g}, ${i}, ${m}):`,`Amar ${d} diner Dooars plan (${g}, ${i}, ${m}):`],
-  more:['Want to change anything?','Kuch badalna hai?','Kichu bodlate chan?'],
+  more:['Would you like to change anything?','Kya aap kuch badalna chahenge?','Apni ki kichu bodlate chan?'],
   chdays:['Change days','Din badlein','Din bodlan'],chbud:['Change budget','Budget badlein','Budget bodlan'],ask:['Ask something','Kuch poochein','Kichu jigges korun']
 };
 const isMonsoon=m=>m>=5&&m<=8;
@@ -238,11 +238,11 @@ function exportCsv(){const a=getLeads();const csv='name,phone,plan,lang,time\n'+
   const u=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const x=document.createElement('a');x.href=u;x.download='leads.csv';x.click();URL.revokeObjectURL(u)}
 function clearLeads(){setLeads([]);renderLeads()}
 const LS={
-  name:['What\'s your name?','Aapka naam kya hai?','Apnar naam ki?'],
-  badname:['Sorry, I just need your first name. What should I call you?','Maaf kijiye, mujhe bas aapka pehla naam chahiye. Kya kehkar bulaoon?','Dukkhito, amar shudhu apnar naam dorkar. Ki bole dakbo?'],
-  phone:n=>[`Thanks ${n}! What's the best WhatsApp number to reach you on?`,`Shukriya ${n}! Aapse kis WhatsApp number par baat karein?`,`Dhonnobad ${n}! Kon WhatsApp number-e jogajog korbo?`],
-  badphone:['That doesn\'t look like a phone number. Could you type it again, with the country code?','Ye phone number jaisa nahi lag raha. Country code ke saath dobara likhein?','Eta phone number-er moto lagchhe na. Country code shoho abar likhun?'],
-  saved:n=>[`All set, ${n}! 🎉 A planner from our team will message you on WhatsApp with exact prices and availability. Meanwhile, ask me anything about the Dooars.`,`Ho gaya, ${n}! 🎉 Hamari team ka planner aapko WhatsApp par exact price aur availability ke saath message karega. Tab tak Dooars ke baare mein kuch bhi poochiye.`,`Hoye gelo, ${n}! 🎉 Amader team-er planner apnake WhatsApp-e exact dam ar availability shoho message korbe. Tatokkhon Dooars somporke kichu jigges korun.`]
+  name:['May I have your name, please?','Kripya apna naam bataiye.','Doya kore apnar naam bolun.'],
+  badname:['I only need your first name, please.','Maaf kijiye, mujhe bas aapka pehla naam chahiye.','Dukkhito, amar shudhu apnar naam dorkar.'],
+  phone:n=>[`Thank you, ${n}. May I have the best WhatsApp number to reach you on?`,`Shukriya, ${n}. Aapse kis WhatsApp number par sampark karein?`,`Dhonnobad, ${n}. Kon WhatsApp number-e jogajog korbo?`],
+  badphone:['That does not look like a valid phone number. Could you please enter it again with the country code?','Ye sahi phone number nahi lag raha. Kripya country code ke saath dobara likhein.','Eta sothik phone number mone hochhe na. Doya kore country code shoho abar likhun.'],
+  saved:n=>[`Thank you, ${n}. A planner from our team will message you on WhatsApp with exact prices and availability. In the meantime, please feel free to ask me anything about the Dooars.`,`Dhanyavaad, ${n}. Hamari team ka planner aapko WhatsApp par exact price aur availability ke saath sampark karega. Tab tak Dooars ke baare mein kuch bhi poochh sakte hain.`,`Dhonnobad, ${n}. Amader team-er planner apnake WhatsApp-e exact dam ar availability shoho jogajog korbe. Ei samoy Dooars somporke kichu jigges korte paren.`]
 };
 async function startLead(intro){
   S.stage='lead_name';trace('(lead)','lead capture started',['no booking promises']);
@@ -274,10 +274,10 @@ const shortText=(t,n=280)=>{if(t.length<=n)return t;const c=t.slice(0,n);const i
    9. THE BRAIN
    ===================================================================== */
 const OFFER={wow:'plan',days:'plan',family:'plan',honeymoon:'plan',kolkata:'plan',homestay:'plan',elderly:'plan',solo:'plan',group:'plan',price:'plan'};
-const UNKNOWN=["I don't have a reliable answer to that, and I'd rather not guess 🙏 I can plan a trip, answer questions about the Dooars, or connect you with our team.",
-  "Iska pakka jawab mere paas nahi hai, aur main andaza nahi lagana chahta 🙏 Main trip plan kar sakta hoon, Dooars ke sawaalon ke jawab de sakta hoon, ya hamari team se mila sakta hoon.",
-  "Eta-r nishchit uttor amar kache nei, ar ami andaje bolte chai na 🙏 Ami trip plan korte pari, Dooars somporke proshner uttor dite pari, ba amader team-er sathe jog korate pari."];
-const REASK={en:'Back to your plan:',hi:'Wapas aapke plan par:',bn:'Apnar plan-e phire ashi:'};
+const UNKNOWN=["I am sorry, I do not have a reliable answer to that, and I would rather not guess. I can plan a trip, answer questions about the Dooars, or connect you with our team.",
+  "Maaf kijiye, iska pakka jawab mere paas nahi hai, aur main andaza nahi lagana chahta. Main trip plan kar sakta hoon, Dooars ke sawaalon ke jawab de sakta hoon, ya hamari team se mila sakta hoon.",
+  "Dukkhito, eta-r nishchit uttor amar kache nei, ar ami andaje bolte chai na. Ami trip plan korte pari, Dooars somporke proshner uttor dite pari, ba amader team-er sathe jog korate pari."];
+const REASK={en:'Returning to your plan:',hi:'Wapas aapke plan par:',bn:'Apnar plan-e phire ashi:'};
 const NOTYET={en:"Got it, no problem 🙂",hi:"Theek hai, koi baat nahi 🙂",bn:"Thik ache, kono byapar na 🙂"};
 
 async function runIntent(it,raw,score,viaChip){
@@ -307,7 +307,7 @@ async function reply(raw,data={}){
   const n=norm(raw);
   if(data.reset||/^(start over|restart|reset|new plan|shuru se|phir se|abar shuru|fresh start)$/.test(n)){
     S.slots={};S.stage='start';S.plan=false;S.awaiting=null;S.offer=null;S.lang='en';setLang('en');renderSlots();trace(raw,'reset');
-    return say(["Fresh start! What would you like to do?","Naye sire se shuru karte hain! Aap kya karna chahenge?","Notun kore shuru kori! Apni ki korte chan?"].slice(0,1),[C('plan'),C('besttime'),C('reach'),C('price')]);
+    return say(["Certainly. How may I help you?","Zaroor. Main aapki kaise madad kar sakta hoon?","Nishchoy. Ami kibhabe sahajyo korte pari?"].slice(0,1),[C('plan'),C('besttime'),C('reach'),C('price')]);
   }
   /* chip with a prepared answer */
   if(data.set){Object.assign(S.slots,data.set);S.plan=false;renderSlots();trace(raw,'chip answer',[Object.keys(data.set).join(',')+'='+Object.values(data.set).join(',')]);
@@ -351,7 +351,7 @@ async function reply(raw,data={}){
     if(S.awaiting&&['yes','ok'].includes(m.it.id)){return say(Q[S.awaiting][LI[S.lang]],OPT[S.awaiting].map(o=>({label:o[LI[S.lang]],set:{[S.awaiting]:o[3]}})))}
     return runIntent(m.it,raw,m.score);
   }
-  if(S.awaiting){trace(raw,'planner: re-ask');await say({en:"Sorry, I didn't catch that. Tap an option or type it in your own words.",hi:"Maaf kijiye, samajh nahi aaya. Option chunein ya apne shabdon mein likhein.",bn:"Dukkhito, bujhte parlam na. Option bachun ba nijer bhashay likhun."}[S.lang]);
+  if(S.awaiting){trace(raw,'planner: re-ask');await say({en:"I am sorry, I did not understand that. Please select an option or type your answer.",hi:"Maaf kijiye, samajh nahi aaya. Kripya ek option chunein ya apna jawab likhein.",bn:"Dukkhito, bujhte parlam na. Doya kore ekta option bachun ba apnar uttor likhun."}[S.lang]);
     return chips(OPT[S.awaiting].map(o=>({label:o[LI[S.lang]],set:{[S.awaiting]:o[3]}})))}
   /* English long-tail: answer from the sourced facts, in a human voice, with no source talk */
   if(S.lang==='en'){const r=retrieve(raw);
@@ -366,11 +366,11 @@ async function reply(raw,data={}){
 
 async function welcome(){
   await typing(700);
-  const d=addCard(`<div class="lead">Hello! 👋 Nomoskar · Namaste</div><div>I'm the Dooars trip assistant.</div><div>I plan trips and answer questions about parks, stays, travel and costs. You can write in English, <b>Bangla</b> or <b>Hindi</b> (Roman or script), whichever is easiest 🙂</div>
-   <div class="tiles"><button class="tile" data-i="plan"><span>🗺️</span><b>Plan my trip</b><small>Day-by-day in a minute</small></button>
-   <button class="tile" data-i="besttime"><span>🌤️</span><b>Best time</b><small>Seasons & monsoon</small></button>
-   <button class="tile" data-i="reach"><span>🚆</span><b>Getting there</b><small>Train, flight, road</small></button>
-   <button class="tile" data-i="safari"><span>🦏</span><b>Safari</b><small>Gorumara, Jaldapara</small></button></div>`);
+  const d=addCard(`<div class="lead">Hello. Nomoskar · Namaste</div><div>I am the Dooars trip assistant.</div><div>I plan trips and answer questions about parks, stays, travel and costs. You may write in English, <b>Bangla</b> or <b>Hindi</b> (Roman or script), whichever is most convenient.</div>
+   <div class="tiles"><button class="tile" data-i="plan"><b>Plan my trip</b><small>Day-by-day in a minute</small></button>
+   <button class="tile" data-i="besttime"><b>Best time</b><small>Seasons & monsoon</small></button>
+   <button class="tile" data-i="reach"><b>Getting there</b><small>Train, flight, road</small></button>
+   <button class="tile" data-i="safari"><b>Safari</b><small>Gorumara, Jaldapara</small></button></div>`);
   d.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>send(b.querySelector('b').textContent,{intent:b.dataset.i}));
   chips([C('stay'),C('price'),C('human')]);
 }
@@ -387,15 +387,15 @@ $('#form').addEventListener('submit',e=>{e.preventDefault();send(inp.value)});
    ===================================================================== */
 const NOFB=new Set(['greet','thanks','bye','wow','ok','yes','nope','later','confused','identity','plan','booking','human','emergency','scope']);
 S.fb=[];S.unans=[];
-const FB_T={ask:['Helpful?','Kaam ka laga?','Kaajer laglo?'],sorry:['Sorry! What was wrong?','Maaf kijiye! Kya galat tha?','Dukkhito! Ki bhul chhilo?'],thx:['Thanks for telling us','Bataane ka shukriya','Jaanaar jonno dhonnobad']};
+const FB_T={ask:['Was this helpful?','Kya yeh upyogi tha?','Eta ki upokari chhilo?'],sorry:['We are sorry. What was wrong?','Maaf kijiye. Kya galat tha?','Dukkhito. Ki bhul chhilo?'],thx:['Thank you for your feedback','Aapki pratikriya ke liye dhanyavaad','Apnar motamoter jonno dhonnobad']};
 const FB_R=[['wrong',['Wrong info','Galat jaankari','Bhul tothyo']],['misread',["Didn't get me",'Samajh nahi paya','Bujhte parenni']],['long',['Too long','Bahut lamba','Boro beshi']]];
 function addFb(q,id){
   const li=LI[S.lang],row=document.createElement('div');row.className='fbrow';
   row.innerHTML=`<span>${FB_T.ask[li]}</span><button data-v="up" aria-label="Helpful">👍</button><button data-v="down" aria-label="Not helpful">👎</button>`;
   row.onclick=e=>{const v=e.target.closest('button')?.dataset.v;if(!v)return;
-    if(v==='up'){S.fb.push({q,id,v:1,lang:S.lang});row.innerHTML='<span>🙏</span>';renderFb();return}
+    if(v==='up'){S.fb.push({q,id,v:1,lang:S.lang});row.innerHTML='<span>Thank you</span>';renderFb();return}
     row.innerHTML=`<span>${FB_T.sorry[li]}</span>`+FB_R.map(([c,l])=>`<button data-r="${c}">${esc(l[li])}</button>`).join('');
-    row.onclick=ev=>{const r=ev.target.closest('button')?.dataset.r;if(!r)return;S.fb.push({q,id,v:-1,r,lang:S.lang});row.innerHTML=`<span>🙏 ${FB_T.thx[li]}</span>`;renderFb()};
+    row.onclick=ev=>{const r=ev.target.closest('button')?.dataset.r;if(!r)return;S.fb.push({q,id,v:-1,r,lang:S.lang});row.innerHTML=`<span>${FB_T.thx[li]}</span>`;renderFb()};
   };
   chat.appendChild(row);scrollDown();
 }
@@ -432,12 +432,12 @@ function startVoice(){
   try{rec=new SR()}catch(e){return vmsg('Voice is not available in this browser. Please type instead.')}
   rec.lang=VLC[vsel];rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;
   rec.onstart=()=>{listening=true;mic.classList.add('on');inp.value='';
-    vmsg('🎤 Listening in <b>'+({en:'English',bn:'Bangla',hi:'Hindi'})[vsel]+'</b>… speak now'+(vNoted?'':'<br><small>Voice is converted by your browser’s speech service (Chrome uses Google).</small>'));vNoted=true};
+    vmsg('Listening in <b>'+({en:'English',bn:'Bangla',hi:'Hindi'})[vsel]+'</b>… speak now'+(vNoted?'':'<br><small>Voice is converted by your browser’s speech service (Chrome uses Google).</small>'));vNoted=true};
   rec.onresult=e=>{let t='';for(const r of e.results)t+=r[0].transcript;inp.value=t};
   rec.onerror=e=>vmsg(VERR[e.error]||('Voice stopped ('+e.error+'). Please type instead.'));
   rec.onend=()=>{listening=false;mic.classList.remove('on');
     if(inp.value.trim()){vmsg('Heard: <b>“'+esc(inp.value.trim())+'”</b> · fix it if needed, then tap send ➤');inp.focus()}
-    else if(/^🎤/.test(vhint.textContent))vmsg('')};
+    else if(/^Listening/.test(vhint.textContent))vmsg('')};
   try{rec.start()}catch(e){}
 }
 if(!SR){mic.hidden=true;vlang.hidden=true}

@@ -291,3 +291,75 @@ add('plan','प्लान|घूमने का प्लान|यात्�
 add('later','सोचकर बताऊंगा|सोचकर बताती|ভেবে দেখি|পরে বলব');
 add('scope','राजनीति|चुनाव|विधायक|सांसद|मंत्री|सरकार|রাজনীতি|নির্বাচন|ভোট|বিধায়ক|সাংসদ');
 })();
+
+/* ---------- formal tone layer: courteous English, no emoji (overrides the earlier drafts above) ---------- */
+(()=>{
+const EN={
+greet:["Hello, and welcome. I am the Dooars trip assistant.","How may I help you today? You may ask a question or choose an option below."],
+thanks:["You are welcome. Is there anything else I can help you with?"],
+bye:["Thank you for your time. Please feel free to return whenever you wish."],
+wow:["I am glad to hear that. Would you like me to prepare a trip plan for you?"],
+ok:["Noted. Is there anything else I can help you with?"],
+confused:["My apologies. Let me put it more simply.","You may ask about the *best time*, *cost*, *how to reach*, or request a *3-day plan*."],
+identity:["I am a virtual assistant for Dooars trips. I can answer most questions and prepare a plan. For bookings and exact prices, a member of our team will assist you."],
+besttime:["The best time to visit is October to March, when the weather is cool and dry and safaris are at their best.","April is also suitable, especially for birdwatching. From June to mid-September it is the rainy season and the main parks remain closed, although the tea gardens and villages are green and quiet."],
+monsoon:["Gorumara and Jaldapara are usually closed from about 16 June to 15 September for the monsoon.","Tea gardens, rivers and village stays remain open, so I can plan a peaceful trip around the closure. Exact dates may change, so please confirm before booking."],
+reach:["The simplest way is to travel by air or train to *Bagdogra airport* or *New Jalpaiguri (NJP)*, followed by a 2 to 3 hour road journey into the Dooars.","For Jaldapara or Buxa, Alipurduar and Hasimara stations are closer. May I ask where you will be travelling from?"],
+kolkata:["From Kolkata, you may take the overnight *Kanchan Kanya Express* from Sealdah to Alipurduar (about 16 hours), or a train to NJP (the Vande Bharat takes about 7.5 hours) followed by a car.","A flight to Bagdogra is quicker if time is limited. Train timings change, so please check the latest schedule when booking. Would you like me to plan the trip?"],
+days:["Three nights and four days is ideal for the Dooars. Two days would feel rushed because of the road journey from Bagdogra or NJP.","With five days or more, Buxa and the Bhutan border can also be included. Shall I prepare a plan for you?"],
+safari:["Jeep safaris operate in Gorumara and Jaldapara, and Jaldapara also offers elephant safaris.","Slots are limited, so early booking is advised in the peak season (November to February). Jaldapara has recently introduced online booking. A jeep typically costs about ₹2,500 to ₹4,500 per trip and an elephant ride about ₹1,000 to ₹1,500 per person. These figures are approximate, and our team will confirm the exact fees."],
+sighting:["I must be honest: no one can guarantee a wildlife sighting, as these are wild forests.","Jaldapara offers the best chance of seeing rhinos, as it has the second largest rhino population in India after Kaziranga. Early morning safaris are usually the best. Tigers are rarely seen here."],
+jaldapara:["Jaldapara is known for the one-horned rhino. It is a large park of about 216 sq km with jeep and elephant safaris, and Hollong or Madarihat is the usual base.","I would suggest staying at least one night nearby so that you can take an early morning safari."],
+gorumara:["Gorumara is smaller, at about 80 sq km, with dense forest, watchtowers, and sightings of rhino, elephants, bison and many birds.","Lataguri is the usual base, and jeep safaris run twice a day. Murti is quieter, and Chalsa is somewhat more upscale."],
+compare:["Both are excellent but different. Gorumara is smaller and denser, with watchtowers. Jaldapara is larger with open grassland and is known for rhinos and elephant safaris.","With three or more days, I would suggest visiting both. If you have time for only one, choose Jaldapara for rhinos or Gorumara for forest and birds. The Dooars is plains, forest and tea, whereas Darjeeling and Sikkim are mountains, so the choice depends on your preference."],
+buxa:["Buxa and Jayanti are quieter and more adventurous, with river-bed walks, forest trails and a trek to Buxa Fort (roughly a 2-hour walk from Santalabari).","This suits those who prefer fewer crowds. The trek is of moderate difficulty and is not ideal for very young children or elderly travellers."],
+samsing:["Samsing and Suntalekhola are peaceful villages at the edge of the hills, with tea gardens, rivers and short forest walks. Rocky Island, near Murti, is popular for sunsets, camping and stargazing.","They suit a slow, relaxed day. Mobile network may be weak in some places."],
+tea:["Tea garden walks are among the most pleasant experiences in the Dooars. The Chalsa and Samsing side has many estates.","Some estates permit walks and tastings, but access varies, so we arrange visits in advance."],
+things:["The Dooars offers jeep and elephant safaris, tea garden walks, river-bed picnics at Murti, birdwatching, a trek to Buxa Fort, village stays, and a day trip to the Bhutan border.","Please tell me what you enjoy (wildlife, nature or adventure), and I will select the best options for your days."],
+bhutan:["A day trip to the Jaigaon and Phuentsholing border town is possible from the eastern Dooars. Indian visitors do not need a visa but must carry a valid photo ID, and travel beyond the border town requires a permit.","Rules change often, so our team confirms the latest requirements before you travel."],
+totopara:["Totopara is a very small village of the Toto community near the Bhutan border. The road can be rough, with river crossings that may be impassable during the rains.","Visits may require prior permission, so I would prefer that our team verify the current rules for your dates rather than guess. Shall I ask them to look into it?"],
+weather:["Winter (November to February) is pleasant and cool, with foggy and chilly mornings. Summer is warm and humid, and the monsoon (June to September) brings heavy rain.","A light jacket is advisable for winter evenings."],
+packing:["Light cotton clothing or layers, a jacket in winter, comfortable walking shoes, a hat, sunscreen, a torch and a photo ID.","For safaris, muted colours such as green, brown and grey are preferable to bright ones. A raincoat is advisable between June and September."],
+network:["Mobile network is weak in some places such as Murti and Ramsai, and small villages may not have ATMs or UPI, so please carry some cash.","Larger towns and most resorts are not affected."],
+language:["Bengali is the main language, and Sadri, Nepali and Hindi are also widely spoken. Guides and hotels manage well in Hindi and English."],
+stay:["There are three kinds of accommodation: forest lodges and eco-cottages run by the state, private resorts and hotels (mostly around Lataguri, Chalsa and Madarihat), and simple village homestays.","Please tell me your budget and who is travelling, and I will suggest a suitable option."],
+homestay:["Homestays offer a good view of village life, with simple rooms, home-cooked food and warm hospitality. They are usually the most economical option as well.","I can include one in your plan if you wish."],
+food:["You can expect home-style Bengali food along with local tribal and Rajbanshi dishes, such as rice, river fish, greens and bamboo shoot.","Meals are usually provided by your stay, so you will not need to search for restaurants. Please mention any preferences at the time of booking."],
+veg:["Vegetarian food is usually easy to find at resorts and homestays. Please mention it when booking so that they can prepare in advance. Jain or strict vegan meals need advance notice."],
+family:["Yes, the Dooars is suitable for children. Safaris, tea gardens and river picnics are enjoyed by most children.","I would suggest keeping road journeys under about 3 hours a day and carrying snacks and sun protection. Shall I plan a family trip?"],
+elderly:["In most cases, yes. I would suggest fewer stops, a stay close to the park (Lataguri or Hollong), and avoiding treks such as Buxa Fort. Jeep safaris are manageable, although the ride can be bumpy.","Please tell me about your group, and I will keep the plan comfortable."],
+honeymoon:["The Dooars makes a quiet and pleasant honeymoon destination, with forest resorts, river views, tea gardens and starry evenings. It offers peace and nature rather than nightlife.","Would you like a plan suited to couples? I will select a suitable resort and a relaxed pace."],
+solo:["Many solo travellers visit, and the region is generally calm. Please choose a reliable stay, avoid travelling on forest roads late at night, and share your plan with someone at home.","If you share your dates, I can suggest well-run stays for solo travellers."],
+safety:["The Dooars is generally calm and welcoming to tourists. The main precaution concerns wildlife: please do not walk alone in forest areas, do not stop on forest roads at night (elephants cross them), and follow your guide's instructions.","Stay at a reliable place and travel on forest roads in daylight."],
+group:["Yes, we can plan for groups. Larger groups need earlier booking, as safari slots and rooms are limited.","May I know how many people will be travelling, and in which month?"],
+price:["As a rough guide for 3 nights and 4 days, per person: budget about ₹6,000 to ₹6,500, mid-range about ₹9,000 to ₹10,000, and comfortable or premium resorts from about ₹15,000.","This usually excludes travel to Bagdogra or NJP, and safari tickets are often extra. For an exact quote, I would need your dates and group size."],
+expensive:["I understand. The cost can be reduced by staying in a homestay, travelling outside the peak season (March, or after the monsoon), or shortening the trip by a day.","Would you like me to revise the plan for a lower budget?"],
+discount:["I am unable to change prices myself, but our team can look for the best option for your dates and group size. Shall I note your details so that they can contact you?"],
+payment:["Payment and cancellation terms are handled by our team so that everything is clear and in writing. I am unable to quote them myself. Shall I take your details so that they can call you?"],
+booking:["Certainly. I am unable to confirm bookings myself, but a member of our team will take this forward."],
+human:["Certainly. I am alerting a member of our team. In a live setup, they receive a notification and continue in this same chat.","May I take your name and number so that they can contact you directly?"],
+complaint:["I am sorry to hear that. I do not want to guess, so I will ask a member of our team to look into it promptly."],
+emergency:["I am unable to assist with medical, legal or emergency matters. If anyone is in danger, please call *112* (India's emergency number) immediately, or contact a local doctor or hospital."],
+scope:["That is outside what I can assist with, as I only help with Dooars trip planning. I would be glad to help with places, stays, safaris, costs or a day-by-day plan."],
+later:["Certainly. Please take your time. You are welcome to return whenever you wish, and your plan will remain here."],
+nope:["Certainly. Please take your time. You are welcome to return whenever you wish, and your plan will remain here."],
+yes:["Certainly."]
+};
+/* Hindi and Bengali (Roman): same polite register, a few chatty lines made formal */
+const HB={
+yes:{hi:["Theek hai."],bn:["Thik ache."]},
+wow:{hi:["Yeh jaankar achha laga. Kya main aapke liye ek plan taiyar karoon?"],bn:["Eta shune bhalo laglo. Ami ki apnar jonno ekta plan toiri korbo?"]},
+sighting:{hi:["Spasht roop se kahoon to, koi bhi sighting ki guarantee nahi de sakta, kyunki ye jungle hai. Main jhoothi umeed nahi dena chahta.","Rhino ke liye Jaldapara sabse achha hai (Kaziranga ke baad India mein sabse zyada rhino yahin hain). Subah ki safari aam taur par best hoti hai. Tiger yahan bahut kam dikhte hain."],bn:["Sposhto kore bolle, keu sighting-er guarantee dite pare na, karon eta jongol. Ami mithye ashwas dite chai na.","Rhino dekhar jonno Jaldapara sobcheye bhalo (Kaziranga-r por Bharote sobcheye beshi rhino ekhane). Bhor-er safari sadharonoto bhalo. Bagh ekhane khub kom dekha jay."]},
+compare:{hi:["Dono achhe hain, lekin alag. Gorumara chhota aur ghana hai, watchtowers ke saath. Jaldapara bada aur khula ghaas ka maidan hai, rhino aur elephant safari ke liye jaana jaata hai.","3 din ya zyada hon to dono dekhna uchit rahega. Ek hi chunna ho to rhino ke liye Jaldapara, jungle aur birds ke liye Gorumara. Dooars maidan, jungle aur chai ka ilaka hai, jabki Darjeeling aur Sikkim pahad hain, isliye ye aapki pasand par nirbhar karta hai."],bn:["Dutoi bhalo, kintu alada. Gorumara chhoto ar ghono, watchtower ache. Jaldapara boro, khola ghaser mathh, rhino ar elephant safari-r jonno bikhyato.","3 din ba beshi hole dutoi dekha uchit. Ekta bachte hole rhino-r jonno Jaldapara, jongol ar pakhir jonno Gorumara. Dooars somotol, jongol ar chaa-er elaka, kintu Darjeeling ar Sikkim pahar, tai eta apnar pochondo-er upor nirbhor kore."]},
+family:{hi:["Ji haan, Dooars bachchon ke saath bhi upyukt hai. Safari, chai bagan aur nadi ke kinare picnic bachchon ko aam taur par pasand aate hain.","Din mein 3 ghante se kam drive rakhne aur snacks tatha sunscreen saath rakhne ki salah dunga. Kya main family trip plan karoon?"],bn:["Hya, Dooars bachchader sathe-o upojogi. Safari, chaa-bagan ar nodir dhare picnic bachchader sadharonoto bhalo lage.","Diney 3 ghontar kom gari rakhte ar snack, sunscreen niye nite boli. Ami ki family trip-er plan kori?"]},
+group:{hi:["Ji haan, groups ke liye bhi plan taiyar ho jaata hai. Bade groups ke liye pehle se booking zaroori hai, kyunki safari slots aur rooms seemit hote hain.","Kripya bataiye, aap kitne log hain aur kaun sa mahina?"],bn:["Hya, group-er jonno-o plan hoy. Boro group-er age theke booking dorkar, karon safari slot ar room simito.","Doya kore bolun, apnara koyjon ar kon mas?"]}
+};
+const EMO=/\s?[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{FE0F}\u{200D}]+\s?/gu;
+/* an emoji that sat between two sentences becomes a full stop; one at the end simply disappears */
+const noEmoji=t=>t.replace(EMO,(m,off,str)=>{const next=str.slice(off+m.length);if(!next)return '';const prev=str[off-1]||'';return /[.!?:;,]/.test(prev)?' ':'. '}).replace(/\s+([.,!?])/g,'$1').trim();
+INTENTS.forEach(it=>{
+  if(EN[it.id])it.r.en=EN[it.id];
+  if(HB[it.id])Object.assign(it.r,HB[it.id]);
+  ['en','hi','bn'].forEach(l=>{it.r[l]=(it.r[l]||[]).map(noEmoji)});
+});
+})();
