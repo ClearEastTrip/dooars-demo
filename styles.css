@@ -135,3 +135,10 @@ body.demo .bar,body.demo .vhint{opacity:.55;pointer-events:none}
 .demobar button{background:var(--accent);color:var(--accent-ink);border:0;border-radius:10px;padding:4px 10px;font-weight:700;cursor:pointer}
 
 .avatar{font-weight:700;color:#fff;font-size:18px}
+
+/* WhatsApp-style input row */
+.bar{gap:8px;padding:8px 10px}
+.bar input{border-radius:22px;padding:11px 16px}
+.bar .send{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:#fff;border:0;cursor:pointer;flex:none;transition:transform .12s,filter .12s}
+.bar .send svg{margin-left:2px}
+.bar .send:hover{filter:brightness(1.05)}.bar .send:active{transform:scale(.94)}

@@ -29,12 +29,9 @@
   </header>
   <div class="progress" aria-hidden="true"><i id="prog"></i></div>
   <div class="chat" id="chat" role="log" aria-live="polite" aria-label="Conversation"></div>
-  <div class="vhint" id="vhint" hidden aria-live="polite"></div>
   <form class="bar" id="form">
-    <button type="button" class="vlang" id="vlang" title="Language you will speak in (tap to change)" aria-label="Voice language">EN</button>
-    <input id="inp" placeholder="English, Bangla or Hindi…" autocomplete="off" aria-label="Type a message" maxlength="300">
-    <button type="button" class="mic" id="mic" aria-label="Speak your message" title="Speak">🎤</button>
-    <button aria-label="Send">➤</button>
+    <input id="inp" placeholder="Type a message" autocomplete="off" aria-label="Type a message" maxlength="300">
+    <button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M3.4 20.4 22 12 3.4 3.6 3.39 10.1l13.3 1.9-13.3 1.9z"/></svg></button>
   </form>
 </main>
 

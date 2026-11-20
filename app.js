@@ -145,7 +145,7 @@ function renderKb(){
   $('#p-kb').innerHTML=`<div class="stat"><div><b>${INTENTS.length}</b><small>question types</small></div><div><b>3</b><small>languages</small></div><div><b>${KB.length}</b><small>sourced facts</small></div></div>
   <p class="empty">Customers can write in English, Banglish (Roman Bengali), Hinglish (Roman Hindi), or Bangla and Hindi script. The bot answers in the same language. Open questions go to a free AI (Cloudflare Workers AI) that may only use the facts supplied from this knowledge base; the rule-based bot is the fallback. Phone numbers are never sent. Sources appear here, never in the chat.</p>`;
 }
-function setLang(l){if(!l||l===S.lang&&$('#langPill').dataset.l===l)return;S.lang=l;const p=$('#langPill');p.dataset.l=l;p.textContent=LANGNAME[l];if(typeof updateVlang==='function')updateVlang()}
+function setLang(l){if(!l||l===S.lang&&$('#langPill').dataset.l===l)return;S.lang=l;const p=$('#langPill');p.dataset.l=l;p.textContent=LANGNAME[l];}
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.setAttribute('aria-selected',x===b));document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='p-'+b.dataset.tab))});
 $('#sheetBtn').onclick=()=>document.body.classList.toggle('sheet');
 $('#menuBtn').onclick=()=>{const m=$('#menu');const o=!m.classList.contains('open');m.classList.toggle('open',o);$('#menuBtn').setAttribute('aria-expanded',o)};
@@ -254,16 +254,34 @@ function renderLeads(){const a=getLeads();$('#leads').innerHTML=a.length?'<table
 function exportCsv(){const a=getLeads();const csv='name,phone,plan,lang,time\n'+a.map(l=>[l.name,l.phone,l.plan,l.lang,l.time].map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(',')).join('\n');
   const u=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const x=document.createElement('a');x.href=u;x.download='leads.csv';x.click();URL.revokeObjectURL(u)}
 function clearLeads(){setLeads([]);renderLeads()}
+/* The team's public contact details. Leave empty until the real number is confirmed; the bot never invents one. */
+const CONTACT={whatsapp:'',phone:'',hours:''};
+function findPhone(t){const m=String(t).match(/(?:\+?\d{1,3}[\s-]?)?(?:\d[\s-]?){9,12}\d/);if(!m)return null;const d=m[0].replace(/\D/g,'');return d.length>=10&&d.length<=13?m[0].trim():null}
+function findName(t){const m=String(t).match(/(?:my name is|name is|this is|mera naam|mera nam|amar naam|amar nam|naam hai|नाम|নাম)\s+([A-Za-z\u0900-\u097F\u0980-\u09FF][A-Za-z\u0900-\u097F\u0980-\u09FF .'-]{0,28})/i);return m?m[1].trim().replace(/\s+(and|aur|ar|here|hai)\b.*$/i,''):null}
+function saveLead(){
+  const sl=S.slots,a=getLeads();
+  a.push({name:S.name||'(not given)',phone:S.phone,plan:S.plan?`${sl.days}d ${sl.interest} ${sl.month} ${sl.budget}`:'enquiry',lang:LANGNAME[S.lang],time:new Date().toISOString()});
+  setLeads(a);renderLeads();S.leadSaved=true;trace('(lead)','lead saved to sheet',['team alerted']);
+}
 const LS={
   name:['May I have your name, please?','Kripya apna naam bataiye.','Doya kore apnar naam bolun.'],
   badname:['I only need your first name, please.','Maaf kijiye, mujhe bas aapka pehla naam chahiye.','Dukkhito, amar shudhu apnar naam dorkar.'],
   phone:n=>[`Thank you, ${n}. May I have the best WhatsApp number to reach you on?`,`Shukriya, ${n}. Aapse kis WhatsApp number par sampark karein?`,`Dhonnobad, ${n}. Kon WhatsApp number-e jogajog korbo?`],
   badphone:['That does not look like a valid phone number. Could you please enter it again with the country code?','Ye sahi phone number nahi lag raha. Kripya country code ke saath dobara likhein.','Eta sothik phone number mone hochhe na. Doya kore country code shoho abar likhun.'],
+  already:p=>[`Your details are already with our team, and a planner will contact you on ${p}. Is there anything else I can help you with?`,`Aapki details hamari team ke paas pehle se hain, aur planner aapko ${p} par sampark karega. Aur kuch madad chahiye?`,`Apnar details amader team-er kache age theke ache, ar planner apnake ${p}-e jogajog korbe. Aro kichu lagbe?`],
+  thanksPhone:['Thank you, I have noted your number. May I also have your name, please?','Shukriya, maine aapka number note kar liya hai. Kripya apna naam bhi bataiye.','Dhonnobad, ami apnar number note korechi. Doya kore apnar naam-o bolun.'],
+  askNameOnly:['Thank you. May I have your name, please?','Shukriya. Kripya apna naam bataiye.','Dhonnobad. Doya kore apnar naam bolun.'],
   saved:n=>[`Thank you, ${n}. A planner from our team will message you on WhatsApp with exact prices and availability. In the meantime, please feel free to ask me anything about the Dooars.`,`Dhanyavaad, ${n}. Hamari team ka planner aapko WhatsApp par exact price aur availability ke saath sampark karega. Tab tak Dooars ke baare mein kuch bhi poochh sakte hain.`,`Dhonnobad, ${n}. Amader team-er planner apnake WhatsApp-e exact dam ar availability shoho jogajog korbe. Ei samoy Dooars somporke kichu jigges korte paren.`]
 };
 async function startLead(intro){
-  S.stage='lead_name';trace('(lead)','lead capture started',['no booking promises']);
-  await say([].concat(intro||[]).concat(LS.name[LI[S.lang]]));
+  const li=LI[S.lang];
+  trace('(lead)','lead capture started',['no booking promises']);
+  if(intro)await say(intro);
+  if(S.leadSaved&&S.phone){S.stage=S.plan?'plan':'ask';return say(LS.already(S.phone)[li])}
+  if(S.name&&S.phone){saveLead();S.stage=S.plan?'plan':'ask';return say(LS.saved(S.name)[li])}
+  if(S.phone){S.stage='lead_name';return say(LS.askNameOnly[li])}
+  if(S.name){S.stage='lead_phone';return say(LS.phone(S.name)[li])}
+  S.stage='lead_name';return say(LS.name[li]);
 }
 
 /* =====================================================================
@@ -297,8 +315,22 @@ const UNKNOWN=["I am sorry, I do not have a reliable answer to that, and I would
 const REASK={en:'Returning to your plan:',hi:'Wapas aapke plan par:',bn:'Apnar plan-e phire ashi:'};
 const NOTYET={en:"Got it, no problem 🙂",hi:"Theek hai, koi baat nahi 🙂",bn:"Thik ache, kono byapar na 🙂"};
 
+const EMP_RX=/\b(worried|worry|scared|afraid|nervous|anxious|tension|upset|angry|disappointed|frustrated|sad|stressed|dar lag|chinta|pareshan|bhoy|dukkho)\b/;
+const EMP=['I understand your concern, and I would be glad to help.','Main aapki chinta samajhta hoon, aur madad karke mujhe khushi hogi.','Ami apnar chinta bujhte pari, ar sahajyo korte pelle khushi hobo.'];
+const CONTACT_T={
+  have:(w,h)=>[`You may reach our team on WhatsApp at ${w}${h?' ('+h+')':''}. If you prefer, I can take your name and number and a planner will contact you.`,`Aap hamari team se WhatsApp par ${w} par sampark kar sakte hain${h?' ('+h+')':''}. Chahein to aapka naam aur number lekar planner aapko sampark karega.`,`Apni amader team-er sathe WhatsApp-e ${w} number-e jogajog korte paren${h?' ('+h+')':''}. Chaile apnar naam ar number niye planner jogajog korbe.`],
+  none:['Our trip planners will contact you personally. If you share your name and WhatsApp number, I will pass them on to the team.','Hamare trip planners aapse khud sampark karenge. Aap apna naam aur WhatsApp number bata dein, main team tak pahuncha doonga.','Amader trip planner apnar sathe nijei jogajog korben. Apni naam ar WhatsApp number bolle ami team-ke jani die debo.']
+};
 async function runIntent(it,raw,score,viaChip){
   const li=LI[S.lang],prev=S.last;S.last=it.id;
+  if(it.id==='contact'){
+    trace(raw,'intent: contact',['no invented numbers']);
+    if(S.leadSaved&&S.phone)return say(LS.already(S.phone)[li]);
+    if(CONTACT.whatsapp){await say(CONTACT_T.have(CONTACT.whatsapp,CONTACT.hours)[li]);S.offer='lead';return}
+    await say(CONTACT_T.none[li]);S.stage='lead_name';if(S.name&&!S.phone)S.stage='lead_phone';return;
+  }
+  if(S.leadSaved&&S.phone&&(it.act==='offerlead'||it.act==='lead')){trace(raw,'intent: '+it.id,['details already on file']);return say(LS.already(S.phone)[li])}
+  if(EMP_RX.test(raw.toLowerCase())&&!['emergency','scope','complaint'].includes(it.id)&&it.act!=='yes'&&it.act!=='no'){await say(EMP[li])}
   trace(raw,'intent: '+it.id+(score?' ('+score.toFixed(1)+')':''),it.caution?['caution: confirm before booking']:[]);
   if(it.act==='plan'){S.offer=null;return askNext()}
   if(it.act==='yes'){
@@ -327,7 +359,7 @@ async function runIntent(it,raw,score,viaChip){
 async function reply(raw,data={}){
   const n=norm(raw);
   if(data.reset||/^(start over|restart|reset|new plan|shuru se|phir se|abar shuru|fresh start)$/.test(n)){
-    S.slots={};S.stage='start';S.plan=false;S.awaiting=null;S.offer=null;S.reask=0;S.turns=0;S.fbAsked=false;S.hist=[];S.planWanted=false;S.aiFails=0;S.lang='en';setLang('en');renderSlots();trace(raw,'reset');
+    S.slots={};S.stage='start';S.plan=false;S.awaiting=null;S.offer=null;S.reask=0;S.turns=0;S.fbAsked=false;S.hist=[];S.planWanted=false;S.aiFails=0;S.name='';S.phone='';S.leadSaved=false;S.lang='en';setLang('en');renderSlots();trace(raw,'reset');
     return say("Certainly. How may I help you?");
   }
   /* chip with a prepared answer */
@@ -340,25 +372,45 @@ async function reply(raw,data={}){
   if(data.intent){const it=INTENTS.find(x=>x.id===data.intent);if(it)return runIntent(it,raw,0,true)}
 
   /* lead capture steps */
-  if(S.stage==='lead_name'){
-    const wc=raw.trim().split(/\s+/).length;
-    if(/\?/.test(raw)||raw.trim().length>40||wc>4){trace(raw,'lead: invalid name',['validate:name']);return say(LS.badname[LI[S.lang]])}
-    S.name=raw.trim().slice(0,60);S.stage='lead_phone';trace(raw,'lead: name captured');return say(LS.phone(S.name)[LI[S.lang]])}
-  if(S.stage==='lead_phone'){
-    if(raw.replace(/\D/g,'').length<8){trace(raw,'lead: invalid phone',['validate:phone']);return say(LS.badphone[LI[S.lang]])}
-    const sl=S.slots,a=getLeads();a.push({name:S.name,phone:raw.trim().slice(0,20),plan:S.plan?`${sl.days}d ${sl.interest} ${sl.month} ${sl.budget}`:'enquiry',lang:LANGNAME[S.lang],time:new Date().toISOString()});setLeads(a);renderLeads();
-    trace(raw,'lead saved to sheet',['team alerted']);S.stage=S.plan?'plan':'ask';
-    return say(LS.saved(S.name)[LI[S.lang]]);
+  if(S.stage==='lead_name'||S.stage==='lead_phone'){
+    const wc=raw.trim().split(/\s+/).length,looksLikeQuestion=/\?/.test(raw)||wc>5||raw.trim().length>48;
+    const ph0=findPhone(raw);
+    if(S.stage==='lead_name'){
+      if(ph0||!looksLikeQuestion){
+        let nm=raw;if(ph0){S.phone=ph0.slice(0,20);nm=raw.replace(ph0,' ').replace(/[,.:;]/g,' ').replace(/\s+/g,' ').trim()}
+        if(nm)S.name=(findName(nm)||nm).slice(0,60);
+        trace(raw,'lead: name captured');
+        if(S.phone){saveLead();S.stage=S.plan?'plan':'ask';return say(LS.saved(S.name||'')[LI[S.lang]])}
+        S.stage='lead_phone';return say(LS.phone(S.name)[LI[S.lang]])}
+      S.stage=S.plan?'plan':'ask';   /* a question, not a name: leave the form and answer it */
+    }else{
+      if(ph0||raw.replace(/\D/g,'').length>=8){S.phone=(ph0||raw.trim()).slice(0,20);saveLead();S.stage=S.plan?'plan':'ask';return say(LS.saved(S.name||'')[LI[S.lang]])}
+      if(!looksLikeQuestion){trace(raw,'lead: invalid phone',['validate:phone']);return say(LS.badphone[LI[S.lang]])}
+      S.stage=S.plan?'plan':'ask';
+    }
   }
 
   /* language, intent, slots */
   if(!n){const ok=INTENTS.find(x=>x.id==='ok');trace(raw,'emoji or symbol only');return runIntent(ok,raw,0)}
   const lang=detectLang(raw,n);if(lang)setLang(lang);
+  /* remember the customer's name and number whenever they are given, so they are never asked for twice */
+  { const ph=findPhone(raw),nm=findName(raw),li0=LI[S.lang];
+    if(nm&&!S.name)S.name=nm.slice(0,40);
+    if(ph){
+      if(S.leadSaved&&S.phone===ph.slice(0,20)){trace(raw,'number already on file');return say(LS.already(S.phone)[li0])}
+      S.phone=ph.slice(0,20);trace(raw,'phone number noted');
+      if(!S.name){const left=raw.replace(ph,' ').replace(/[,.:;\-]/g,' ').replace(/\s+/g,' ').trim();
+        if(left&&left.split(' ').length<=3&&/^[A-Za-z\u0900-\u097F\u0980-\u09FF][A-Za-z\u0900-\u097F\u0980-\u09FF .'-]{0,30}$/.test(left))S.name=left.slice(0,40)}
+      const rest=n.replace(/[\d\s+-]{8,}/g,' ').trim().split(' ').filter(Boolean).length;
+      if(rest<=3){ if(S.name){saveLead();return say(LS.saved(S.name)[li0])} S.stage='lead_name';return say(LS.thanksPhone[li0]) }
+      saveLead();
+    }
+  }
   const m=matchIntent(n),slots=extractSlots(n),keys=Object.keys(slots);
   const hard=m&&['emergency','scope'].includes(m.it.id);
   if(hard)return runIntent(m.it,raw,m.score);
   /* open conversation goes to the AI; instant small talk, human handoff and lead capture stay local */
-  if(S.ai&&!S.aiOff&&!(m&&(m.it.short||['lead','offerlead'].includes(m.it.act)))){
+  if(S.ai&&!S.aiOff&&!(m&&(m.it.short||['lead','offerlead','contact'].includes(m.it.act)))){
     if(m&&m.it.id==='plan')S.planWanted=true;
     if(await aiReply(raw,n))return;
   }
@@ -402,9 +454,13 @@ async function welcome(){
 }
 let busy=false;
 async function send(text,data){
-  text=(text||'').trim();if(!text||busy)return;busy=true;clearChips();addMsg(text,'out');inp.value='';S.turns=(S.turns||0)+1;if(typeof vmsg==='function')vmsg('');
+  text=(text||'').trim();if(!text||busy)return;busy=true;clearChips();addMsg(text,'out');inp.value='';S.turns=(S.turns||0)+1;
+  const inBefore=chat.querySelectorAll('.msg.in').length;S.lastAI=false;
   document.body.classList.remove('sheet');
-  try{await reply(text,data||{});await maybeFeedback()}catch(e){console.error(e);addMsg('Something went wrong. Please try again.','in')}
+  try{await reply(text,data||{});
+    /* turns answered by the rules are also remembered, so the AI never loses the thread */
+    if(!S.lastAI&&!(S.stage||'').startsWith('lead')){const t=[...chat.querySelectorAll('.msg.in')].slice(inBefore).map(m=>m.innerText.replace(/\d{1,2}:\d{2}\s?[AP]M/g,'').trim()).join(' ');if(t){S.hist.push({role:'user',content:scrub(text)},{role:'assistant',content:scrub(t).slice(0,400)});S.hist=S.hist.slice(-12)}}
+    await maybeFeedback()}catch(e){console.error(e);addMsg('Something went wrong. Please try again.','in')}
   busy=false;inp.focus();
 }
 $('#form').addEventListener('submit',e=>{e.preventDefault();send(inp.value)});
@@ -414,7 +470,7 @@ $('#form').addEventListener('submit',e=>{e.preventDefault();send(inp.value)});
 const AI_URL='https://dooars-chat.cleareasttravels.workers.dev/';
 S.ai=true;S.aiOff=false;S.aiFails=0;S.hist=[];S.planWanted=false;
 const ABOUT='We arrange Dooars trips. A human planner on our team confirms exact prices, availability and bookings; the assistant gives general guidance only.';
-const SMALLTALK=new Set(['greet','thanks','bye','wow','ok','yes','nope','later','confused','identity','scope','emergency']);
+const SMALLTALK=new Set(['contact','greet','thanks','bye','wow','ok','yes','nope','later','confused','identity','scope','emergency']);
 const VALID={group:['Family','Couple','Friends','Solo'],interest:['Wildlife','Nature','Offbeat'],budget:['Budget','Comfort','Premium']};
 const scrub=t=>String(t).replace(/\+?\d[\d\s-]{7,}\d/g,'[number]').slice(0,500);
 function scriptKey(raw){return S.lang==='en'?'en':S.lang+(/[\u0900-\u097F\u0980-\u09FF]/.test(raw)?'-native':'-roman')}
@@ -429,7 +485,9 @@ function gatherFacts(raw,n){
   ranked.sort((a,b)=>b.sc-a.sc);
   const facts=ranked.slice(0,3).map(x=>x.t);
   if(S.lang==='en'||!facts.length){const r=retrieve(raw);if(r)facts.push(r.c.ctx+': '+r.c.text)}
-  return [ABOUT,...facts];
+  const extra=[];
+  if(S.leadSaved||S.phone)extra.push('The customer has ALREADY shared their phone number (and name if given) with our team, who will contact them. Never ask for their name, number or contact details again.');
+  return [ABOUT,...extra,...facts];
 }
 function showTyping(){markRead();const ty=document.createElement('div');ty.className='typing';ty.innerHTML='<i></i><i></i><i></i>';chat.appendChild(ty);scrollDown();return ty}
 async function sayNow(text){for(const part of splitBubbles(text)){addMsg(part,'in');await sleep(280)}}
@@ -447,13 +505,13 @@ async function aiReply(raw,n){
   const prevFull=ORDER.every(k=>S.slots[k]);
   const ty=showTyping();let j=null,ms=0;
   try{
-    const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),14000),t0=performance.now();
+    const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),18000),t0=performance.now();
     const r=await fetch(AI_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:ctl.signal});
     clearTimeout(to);ms=Math.round(performance.now()-t0);if(r.ok)j=await r.json();
   }catch(e){}
   ty.remove();
   if(!j||!j.reply){S.aiFails++;trace(raw,'AI unavailable, using rules',['fallback']);if(S.aiFails>=3){S.aiOff=true;trace('(system)','AI switched off for this session after 3 failures')}return false}
-  S.aiFails=0;S.awaiting=null;
+  S.aiFails=0;S.awaiting=null;S.lastAI=true;
   const rule=extractSlots(n);              /* the rule-based reader double-checks clear facts in the message */
   const changed=mergeState(j.state);
   for(const k of ['days','group','interest','month','budget']){if(rule[k]&&!S.slots[k])S.slots[k]=rule[k]}
@@ -515,33 +573,6 @@ function renderFb(){
    ${!S.fb.length&&!S.unans.length?'<div class="empty">Tap 👍 or 👎 under answers. Anything the bot could not answer shows up here.</div>':''}
    <div class="btns"><button onclick="sendFeedback()">Send via WhatsApp</button><button onclick="navigator.clipboard&&navigator.clipboard.writeText(feedbackText())">Copy</button></div>`;
 }
-
-/* =====================================================================
-   11. VOICE INPUT (browser speech recognition; text is shown for checking before sending)
-   ===================================================================== */
-const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-const mic=$('#mic'),vlang=$('#vlang'),vhint=$('#vhint');
-const VLC={en:'en-IN',bn:'bn-IN',hi:'hi-IN'},VLL={en:'EN',bn:'বাং',hi:'हिं'};
-let vsel='en',vManual=false,rec=null,listening=false,vNoted=false;
-function updateVlang(){if(!vManual)vsel=S.lang;vlang.textContent=VLL[vsel]}
-function vmsg(h){vhint.hidden=!h;vhint.innerHTML=h||''}
-const VERR={'not-allowed':'The microphone is blocked. Allow it in your browser settings, or type instead.','service-not-allowed':'Voice is not allowed on this device. Please type instead.',
-  'no-speech':'I did not hear anything. Tap the mic and try again.','audio-capture':'No microphone found.','network':'Voice needs an internet connection.','language-not-supported':'This language is not supported for voice on your device.'};
-function startVoice(){
-  if(busy)return;
-  try{rec=new SR()}catch(e){return vmsg('Voice is not available in this browser. Please type instead.')}
-  rec.lang=VLC[vsel];rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;
-  rec.onstart=()=>{listening=true;mic.classList.add('on');inp.value='';
-    vmsg('Listening in <b>'+({en:'English',bn:'Bangla',hi:'Hindi'})[vsel]+'</b>… speak now'+(vNoted?'':'<br><small>Voice is converted by your browser’s speech service (Chrome uses Google).</small>'));vNoted=true};
-  rec.onresult=e=>{let t='';for(const r of e.results)t+=r[0].transcript;inp.value=t};
-  rec.onerror=e=>vmsg(VERR[e.error]||('Voice stopped ('+e.error+'). Please type instead.'));
-  rec.onend=()=>{listening=false;mic.classList.remove('on');
-    if(inp.value.trim()){vmsg('Heard: <b>“'+esc(inp.value.trim())+'”</b> · fix it if needed, then tap send ➤');inp.focus()}
-    else if(/^Listening/.test(vhint.textContent))vmsg('')};
-  try{rec.start()}catch(e){}
-}
-if(!SR){mic.hidden=true;vlang.hidden=true}
-else{mic.onclick=()=>{listening?rec.stop():startVoice()};vlang.onclick=()=>{vManual=true;vsel=({en:'bn',bn:'hi',hi:'en'})[vsel];updateVlang()}}
 
 /* =====================================================================
    12. PLAY-DEMO (a scripted chat that runs through the real engine)
