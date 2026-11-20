@@ -472,7 +472,8 @@ S.ai=true;S.aiOff=false;S.aiFails=0;S.hist=[];S.planWanted=false;
 const ABOUT='We arrange Dooars trips. A human planner on our team confirms exact prices, availability and bookings; the assistant gives general guidance only.';
 const SMALLTALK=new Set(['contact','greet','thanks','bye','wow','ok','yes','nope','later','confused','identity','scope','emergency']);
 const VALID={group:['Family','Couple','Friends','Solo'],interest:['Wildlife','Nature','Offbeat'],budget:['Budget','Comfort','Premium']};
-const scrub=t=>String(t).replace(/\+?\d[\d\s-]{7,}\d/g,'[number]').slice(0,500);
+/* phone numbers and the customer's name are masked before anything is sent to the AI */
+const scrub=t=>{let y=String(t).replace(/\+?\d[\d\s-]{7,}\d/g,'[number]');if(S.name&&S.name.length>1)y=y.split(S.name).join('the customer');return y.slice(0,500)};
 function scriptKey(raw){return S.lang==='en'?'en':S.lang+(/[\u0900-\u097F\u0980-\u09FF]/.test(raw)?'-native':'-roman')}
 function gatherFacts(raw,n){
   const words=n.split(' ').length,ranked=[];
