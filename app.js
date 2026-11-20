@@ -81,9 +81,10 @@ function extractSlots(n){
   else if(/\b(winter|sardi|sheet)\b/.test(n))g.month='December';
   else if(/\b(summer|garmi|grishmo)\b/.test(n))g.month='May';
   else if(S.awaiting==='month'&&/\b(monsoon|barish|baarish|borsha|rain|rainy)\b/.test(n))g.month='July';
-  if(/\b(budget|cheap|economy|affordable|sasta|sosta|tight)\b|सस्ता|সস্তা/.test(n))g.budget='Budget';
-  else if(/\b(comfort|comfortable|mid|midrange|mid range|medium|moderate|standard|thik thak|theek thaak|majhari)\b|মাঝারি/.test(n))g.budget='Comfort';
+  /* comfort and premium are checked first, so "mid-range budget" or "majhari budget" is not mistaken for the cheapest option */
+  if(/\b(comfort|comfortable|mid|midrange|mid range|medium|moderate|standard|thik thak|theek thaak|majhari)\b|মাঝারি/.test(n))g.budget='Comfort';
   else if(/\b(premium|luxury|luxurious|high end|dami)\b|लक्ज़री|বিলাসবহুল/.test(n))g.budget='Premium';
+  else if(/\b(cheap|economy|affordable|sasta|sosta|tight|low budget|kom budget|budget kom|budget option)\b|सस्ता|সস্তা/.test(n)||(S.awaiting==='budget'&&/\bbudget\b/.test(n)))g.budget='Budget';
   else if(S.awaiting==='budget'&&/\b(best|bhalo|ujjol|resort)\b/.test(n))g.budget='Premium';
   return g;
 }
@@ -192,6 +193,7 @@ const SX={
   fam:['Family tip: keep drives under about 3 hours a day and add one kid-friendly stop.','Family tip: din mein 3 ghante se kam drive rakhein aur ek bachchon ke layak jagah jodein.','Family tip: diney 3 ghontar kom gari rakhun ar ekta bachchader upojogi jayga jurun.'],
   share:['Share on WhatsApp','WhatsApp par share karein','WhatsApp-e share korun'],
   pre:(d,g,i,m)=>[`My ${d}-day Dooars plan (${g}, ${i}, ${m}):`,`Mera ${d} din ka Dooars plan (${g}, ${i}, ${m}):`,`Amar ${d} diner Dooars plan (${g}, ${i}, ${m}):`],
+  more2:['You may ask me to change anything, for example "make it 4 days" or "premium budget", or ask any question about the trip.','Aap kuch badalwa sakte hain, jaise "4 din kar do" ya "premium budget", ya trip ke baare mein koi bhi sawaal poochh sakte hain.','Apni bodlate bolte paren, jemon "4 din koro" ba "premium budget", ba trip somporke jekono proshno korte paren.'],
   more:['Would you like to change anything?','Kya aap kuch badalna chahenge?','Apni ki kichu bodlate chan?'],
   chdays:['Change days','Din badlein','Din bodlan'],chbud:['Change budget','Budget badlein','Budget bodlan'],ask:['Ask something','Kuch poochein','Kichu jigges korun']
 };
@@ -206,12 +208,26 @@ function buildPlan(){
 }
 function planText(p){const {days,group,interest,month}=S.slots,li=LI[S.lang];
   return SX.pre(days,group,interest,month)[li]+'\n\n'+p.items.map(i=>`Day ${i.n}: ${i.t}\n${i.d}`).join('\n\n')+`\n\n${p.cost}\n\nDooars Trip Assistant (demo)`}
+const SLOTN={days:['the number of days','kitne din','koto din'],group:['who is travelling','kaun-kaun ja raha hai','ke ke jachchen'],
+  interest:['what you enjoy (wildlife, nature or adventure)','aapko kya pasand hai (jungle, prakriti ya adventure)','apnar ki bhalo lage (jongol, prokriti ba adventure)'],
+  month:['the month','kaun sa mahina','kon mas'],budget:['your budget (budget, comfortable or premium)','aapka budget (budget, comfort ya premium)','apnar budget (budget, comfort ba premium)']};
+const FIRSTQ=['I would be glad to prepare a plan. Please tell me, in one message if you wish: the number of days, who is travelling, what you enjoy (wildlife, nature or adventure), the month, and your budget. For example: 3 days, family, wildlife, December, comfortable.',
+  'Mujhe plan banane mein khushi hogi. Kripya ek hi message mein bataiye: kitne din, kaun-kaun ja raha hai, aapko kya pasand hai (jungle, prakriti ya adventure), kaun sa mahina aur budget. Udaharan: 3 din, family, jungle, December, comfort.',
+  'Plan toiri korte pele khushi hobo. Doya kore ekta message-e bolun: koto din, ke ke jachchen, apnar ki bhalo lage (jongol, prokriti ba adventure), kon mas ar budget. Jemon: 3 din, family, jongol, December, comfort.'];
+const ASKM=[n=>`May I also know ${n}?`,n=>`Kripya ${n} bhi bataiye.`,n=>`Doya kore ${n}-o bolun.`];
+function askText(first){
+  const li=LI[S.lang],miss=ORDER.filter(k=>!S.slots[k]);
+  if(first&&miss.length===ORDER.length)return FIRSTQ[li];
+  const a=miss.map(k=>SLOTN[k][li]),and=['and','aur','ar'][li];
+  const list=a.length<2?a.join(''):a.slice(0,-1).join(', ')+' '+and+' '+a[a.length-1];
+  return ASKM[li](list);
+}
 async function askNext(ack){
   const miss=ORDER.find(k=>!S.slots[k]),li=LI[S.lang];
   if(miss){S.awaiting=miss;S.stage='ask';
-    const lines=[];if(ack)lines.push(ack);lines.push(Q[miss][li]);
-    await say(lines,OPT[miss].map(o=>({label:o[li],set:{[miss]:o[3]}})));return}
-  S.awaiting=null;S.stage='plan';S.plan=true;S.offer=null;
+    const lines=[];if(ack)lines.push(ack);lines.push(askText(true));
+    await say(lines);return}
+  S.awaiting=null;S.stage='plan';S.plan=true;S.offer=null;S.justPlanned=true;
   const p=buildPlan();S.lastPlanText=planText(p);
   trace('(planner)','itinerary built',[p.warn?'monsoon: parks removed':'seasonal check ok'],S.lastPlanText.split('\n')[0]);
   await typing(1000);
@@ -224,7 +240,7 @@ async function askNext(ack){
    ${warn}${tip}<div class="cost">${esc(p.cost)}</div>
    <div class="cta"><button class="btn" data-q="1">${esc(CHIPL.booking[li])}</button><a class="btn ghost" href="${wa}" target="_blank" rel="noopener noreferrer">${esc(SX.share[li])}</a></div></div>`);
   card.querySelector('[data-q]').onclick=()=>send(CHIPL.booking[li],{intent:'booking'});
-  await say(SX.more[li],[{label:SX.chdays[li],redo:'days'},{label:SX.chbud[li],redo:'budget'},C('price'),C('human')]);
+  await say(SX.more2[li]);
 }
 
 /* =====================================================================
@@ -281,33 +297,37 @@ const REASK={en:'Returning to your plan:',hi:'Wapas aapke plan par:',bn:'Apnar p
 const NOTYET={en:"Got it, no problem 🙂",hi:"Theek hai, koi baat nahi 🙂",bn:"Thik ache, kono byapar na 🙂"};
 
 async function runIntent(it,raw,score,viaChip){
-  const li=LI[S.lang];S.last=it.id;
+  const li=LI[S.lang],prev=S.last;S.last=it.id;
   trace(raw,'intent: '+it.id+(score?' ('+score.toFixed(1)+')':''),it.caution?['caution: confirm before booking']:[]);
   if(it.act==='plan'){S.offer=null;return askNext()}
   if(it.act==='yes'){
     if(S.offer==='lead'){S.offer=null;return startLead()}
     if(S.offer==='budgetdown'){S.offer=null;S.slots.budget='Budget';S.plan=false;renderSlots();return askNext()}
     if(S.offer==='plan'){S.offer=null;return askNext()}
-    if(S.awaiting){return say(Q[S.awaiting][li],OPT[S.awaiting].map(o=>({label:o[li],set:{[S.awaiting]:o[3]}})))}
-    await say(it.r[S.lang]);return chips([C('plan'),C('besttime'),C('price')]);
+    if(S.awaiting){return say(askText())}
+    return say(it.r[S.lang]);
   }
   if(it.act==='no'){S.offer=null}
   if(it.act==='lead'){await say(it.r[S.lang]);return startLead()}
+  /* the same question asked twice in a row: say so instead of repeating the whole answer silently */
+  if(prev===it.id&&!it.act&&!['greet','ok','thanks'].includes(it.id))await say(({en:'To repeat the key points:',hi:'Mukhya baatein dobara:',bn:'Mukhyo kotha abar:'})[S.lang]);
   await say(it.r[S.lang]);
-  if(!NOFB.has(it.id))addFb(raw,it.id);
-  chips((it.next||[]).slice(0,4).map(C));
   if(it.act==='offerlead')S.offer='lead';
   else if(it.act==='budgetdown')S.offer='budgetdown';
   else if(OFFER[it.id])S.offer=OFFER[it.id];
   /* if a planner question was pending, gently bring the customer back to it */
-  if(S.awaiting&&!['emergency','scope'].includes(it.id)){await sleep(400);await say([REASK[S.lang],Q[S.awaiting][li]],OPT[S.awaiting].map(o=>({label:o[li],set:{[S.awaiting]:o[3]}})))}
+  /* a pending planner question is mentioned once; if the customer moves on, we let it go */
+  if(S.awaiting&&!['emergency','scope'].includes(it.id)){
+    if((S.reask||0)<1){S.reask=(S.reask||0)+1;await sleep(300);await say([REASK[S.lang],askText()])}
+    else{S.awaiting=null}
+  }
 }
 
 async function reply(raw,data={}){
   const n=norm(raw);
   if(data.reset||/^(start over|restart|reset|new plan|shuru se|phir se|abar shuru|fresh start)$/.test(n)){
-    S.slots={};S.stage='start';S.plan=false;S.awaiting=null;S.offer=null;S.lang='en';setLang('en');renderSlots();trace(raw,'reset');
-    return say(["Certainly. How may I help you?","Zaroor. Main aapki kaise madad kar sakta hoon?","Nishchoy. Ami kibhabe sahajyo korte pari?"].slice(0,1),[C('plan'),C('besttime'),C('reach'),C('price')]);
+    S.slots={};S.stage='start';S.plan=false;S.awaiting=null;S.offer=null;S.reask=0;S.turns=0;S.fbAsked=false;S.lang='en';setLang('en');renderSlots();trace(raw,'reset');
+    return say("Certainly. How may I help you?");
   }
   /* chip with a prepared answer */
   if(data.set){Object.assign(S.slots,data.set);S.plan=false;renderSlots();trace(raw,'chip answer',[Object.keys(data.set).join(',')+'='+Object.values(data.set).join(',')]);
@@ -327,7 +347,7 @@ async function reply(raw,data={}){
     if(raw.replace(/\D/g,'').length<8){trace(raw,'lead: invalid phone',['validate:phone']);return say(LS.badphone[LI[S.lang]])}
     const sl=S.slots,a=getLeads();a.push({name:S.name,phone:raw.trim().slice(0,20),plan:S.plan?`${sl.days}d ${sl.interest} ${sl.month} ${sl.budget}`:'enquiry',lang:LANGNAME[S.lang],time:new Date().toISOString()});setLeads(a);renderLeads();
     trace(raw,'lead saved to sheet',['team alerted']);S.stage=S.plan?'plan':'ask';
-    return say(LS.saved(S.name)[LI[S.lang]],[C('besttime'),C('stay'),C('safari')]);
+    return say(LS.saved(S.name)[LI[S.lang]]);
   }
 
   /* language, intent, slots */
@@ -341,24 +361,25 @@ async function reply(raw,data={}){
   /* is this an answer to the planner's question, or a fresh question that just mentions a slot word? */
   const takeSlots=keys.length&&(S.awaiting?!(isQ&&strong):(planWord||keys.length>=2||!m||m.score<3));
   if(takeSlots){
-    Object.assign(S.slots,slots);S.plan=false;renderSlots();trace(raw,'slots understood',[keys.map(k=>k+'='+slots[k]).join(', ')]);
+    Object.assign(S.slots,slots);S.plan=false;S.reask=0;renderSlots();trace(raw,'slots understood',[keys.map(k=>k+'='+slots[k]).join(', ')]);
     let ack=null;if(slots.group&&ACK.group[slots.group])ack=ACK.group[slots.group][LI[S.lang]];
     if(slots.month&&isMonsoon(MFULL.indexOf(slots.month)))ack=ACK.monsoon[LI[S.lang]];
     return askNext(ack);
   }
   if(m){
+    /* remember clear facts (days, who, month, budget) mentioned in passing, so they are never asked again */
+    ['days','group','month','budget'].forEach(k=>{if(slots[k]&&!S.slots[k]){S.slots[k]=slots[k];trace(raw,'remembered '+k+'='+slots[k])}});renderSlots();
     /* a bare yes/ok while a planner question is open is not an answer */
-    if(S.awaiting&&['yes','ok'].includes(m.it.id)){return say(Q[S.awaiting][LI[S.lang]],OPT[S.awaiting].map(o=>({label:o[LI[S.lang]],set:{[S.awaiting]:o[3]}})))}
+    if(S.awaiting&&['yes','ok'].includes(m.it.id)){return say(askText())}
     return runIntent(m.it,raw,m.score);
   }
-  if(S.awaiting){trace(raw,'planner: re-ask');await say({en:"I am sorry, I did not understand that. Please select an option or type your answer.",hi:"Maaf kijiye, samajh nahi aaya. Kripya ek option chunein ya apna jawab likhein.",bn:"Dukkhito, bujhte parlam na. Doya kore ekta option bachun ba apnar uttor likhun."}[S.lang]);
-    return chips(OPT[S.awaiting].map(o=>({label:o[LI[S.lang]],set:{[S.awaiting]:o[3]}})))}
+  if(S.awaiting&&!isQ){trace(raw,'planner: not understood');return say({en:"I am sorry, I did not understand that. "+askText(),hi:"Maaf kijiye, samajh nahi aaya. "+askText(),bn:"Dukkhito, bujhte parlam na. "+askText()}[S.lang])}
   /* English long-tail: answer from the sourced facts, in a human voice, with no source talk */
   if(S.lang==='en'){const r=retrieve(raw);
     if(r){trace(raw,'fallback: fact base',[],'chunk '+r.c.id+' · '+r.c.ctx+' · '+(r.c.src[0]?r.c.src[0].l+' '+r.c.src[0].u:''));
       const warn=['conflict','unverified','old','operator'].includes(r.c.kind);
       await say([`Here's what I know about ${r.c.ctx.replace(/\s*\([^)]*\)/,'')}:`,shortText(r.c.text)+(warn?" (Details can differ, so I'd confirm before you rely on it.)":'')]);
-      addFb(raw,'fact-base');return chips([C('plan'),C('human')])}}
+      return}}
   trace(raw,'fallback: no confident match',['honest fallback','handoff offered']);
   (S.unans=S.unans||[]).push(raw);renderFb();
   return say(UNKNOWN[LI[S.lang]],[C('plan'),C('human')]);
@@ -372,13 +393,12 @@ async function welcome(){
    <button class="tile" data-i="reach"><b>Getting there</b><small>Train, flight, road</small></button>
    <button class="tile" data-i="safari"><b>Safari</b><small>Gorumara, Jaldapara</small></button></div>`);
   d.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>send(b.querySelector('b').textContent,{intent:b.dataset.i}));
-  chips([C('stay'),C('price'),C('human')]);
 }
 let busy=false;
 async function send(text,data){
-  text=(text||'').trim();if(!text||busy)return;busy=true;clearChips();addMsg(text,'out');inp.value='';if(typeof vmsg==='function')vmsg('');
+  text=(text||'').trim();if(!text||busy)return;busy=true;clearChips();addMsg(text,'out');inp.value='';S.turns=(S.turns||0)+1;if(typeof vmsg==='function')vmsg('');
   document.body.classList.remove('sheet');
-  try{await reply(text,data||{})}catch(e){console.error(e);addMsg('Something went wrong. Please try again.','in')}
+  try{await reply(text,data||{});await maybeFeedback()}catch(e){console.error(e);addMsg('Something went wrong. Please try again.','in')}
   busy=false;inp.focus();
 }
 $('#form').addEventListener('submit',e=>{e.preventDefault();send(inp.value)});
@@ -389,9 +409,17 @@ const NOFB=new Set(['greet','thanks','bye','wow','ok','yes','nope','later','conf
 S.fb=[];S.unans=[];
 const FB_T={ask:['Was this helpful?','Kya yeh upyogi tha?','Eta ki upokari chhilo?'],sorry:['We are sorry. What was wrong?','Maaf kijiye. Kya galat tha?','Dukkhito. Ki bhul chhilo?'],thx:['Thank you for your feedback','Aapki pratikriya ke liye dhanyavaad','Apnar motamoter jonno dhonnobad']};
 const FB_R=[['wrong',['Wrong info','Galat jaankari','Bhul tothyo']],['misread',["Didn't get me",'Samajh nahi paya','Bujhte parenni']],['long',['Too long','Bahut lamba','Boro beshi']]];
-function addFb(q,id){
+const FBQ=['Before you go, may I ask whether this conversation was helpful?','Jaane se pehle, kya main poochh sakta hoon ki yeh baatcheet upyogi thi?','Jawar age jante chai, ei kotha-bartata ki upokari chhilo?'];
+async function maybeFeedback(){
+  if(S.justPlanned){S.justPlanned=false;return}
+  if(S.fbAsked||document.body.classList.contains('demo')||(S.stage||'').startsWith('lead')||S.awaiting)return;
+  const closing=['thanks','bye'].includes(S.last);
+  if(!(S.turns>=6||(closing&&S.turns>=3)))return;
+  S.fbAsked=true;await sleep(500);await say(FBQ[LI[S.lang]]);addFb('(whole conversation)','overall',true);
+}
+function addFb(q,id,noLabel){
   const li=LI[S.lang],row=document.createElement('div');row.className='fbrow';
-  row.innerHTML=`<span>${FB_T.ask[li]}</span><button data-v="up" aria-label="Helpful">👍</button><button data-v="down" aria-label="Not helpful">👎</button>`;
+  row.innerHTML=`${noLabel?'':`<span>${FB_T.ask[li]}</span>`}<button data-v="up" aria-label="Helpful">👍</button><button data-v="down" aria-label="Not helpful">👎</button>`;
   row.onclick=e=>{const v=e.target.closest('button')?.dataset.v;if(!v)return;
     if(v==='up'){S.fb.push({q,id,v:1,lang:S.lang});row.innerHTML='<span>Thank you</span>';renderFb();return}
     row.innerHTML=`<span>${FB_T.sorry[li]}</span>`+FB_R.map(([c,l])=>`<button data-r="${c}">${esc(l[li])}</button>`).join('');
