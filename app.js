@@ -143,14 +143,15 @@ function renderTrace(){$('#p-trace').innerHTML=traces.slice(0,8).map(t=>`<div cl
 function renderKb(){
   const by={};KB.forEach(c=>by[c.topic]=(by[c.topic]||0)+1);
   $('#p-kb').innerHTML=`<div class="stat"><div><b>${INTENTS.length}</b><small>question types</small></div><div><b>3</b><small>languages</small></div><div><b>${KB.length}</b><small>sourced facts</small></div></div>
-  <p class="empty">Customers can write in English, Banglish (Roman Bengali), Hinglish (Roman Hindi), or Bangla and Hindi script. The bot answers in the same language. Curated answers come first; the sourced fact base (from the research dossier) backs up English questions. Sources appear here, never in the chat.</p>`;
+  <p class="empty">Customers can write in English, Banglish (Roman Bengali), Hinglish (Roman Hindi), or Bangla and Hindi script. The bot answers in the same language. Open questions go to a free AI (Cloudflare Workers AI) that may only use the facts supplied from this knowledge base; the rule-based bot is the fallback. Phone numbers are never sent. Sources appear here, never in the chat.</p>`;
 }
 function setLang(l){if(!l||l===S.lang&&$('#langPill').dataset.l===l)return;S.lang=l;const p=$('#langPill');p.dataset.l=l;p.textContent=LANGNAME[l];if(typeof updateVlang==='function')updateVlang()}
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.setAttribute('aria-selected',x===b));document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='p-'+b.dataset.tab))});
 $('#sheetBtn').onclick=()=>document.body.classList.toggle('sheet');
 $('#menuBtn').onclick=()=>{const m=$('#menu');const o=!m.classList.contains('open');m.classList.toggle('open',o);$('#menuBtn').setAttribute('aria-expanded',o)};
 document.addEventListener('click',e=>{if(!e.target.closest('#menu,#menuBtn'))$('#menu').classList.remove('open')});
-$('#menu').onclick=e=>{const dm=e.target.dataset.demo;if(dm){$('#menu').classList.remove('open');return playDemo(dm)}
+$('#menu').onclick=e=>{if(e.target.dataset.act==='ai'){S.ai=!S.ai;S.aiOff=false;S.aiFails=0;e.target.textContent='AI replies: '+(S.ai?'on':'off');trace('(menu)','AI replies '+(S.ai?'on':'off'));return}
+  const dm=e.target.dataset.demo;if(dm){$('#menu').classList.remove('open');return playDemo(dm)}
   const a=e.target.dataset.act;if(!a)return;$('#menu').classList.remove('open');if(a==='feedback')return sendFeedback();send(a==='restart'?'start over':a==='plan'?CHIPL.plan[LI[S.lang]]:CHIPL.human[LI[S.lang]],a==='restart'?{reset:true}:{intent:a})};
 
 /* =====================================================================
@@ -326,7 +327,7 @@ async function runIntent(it,raw,score,viaChip){
 async function reply(raw,data={}){
   const n=norm(raw);
   if(data.reset||/^(start over|restart|reset|new plan|shuru se|phir se|abar shuru|fresh start)$/.test(n)){
-    S.slots={};S.stage='start';S.plan=false;S.awaiting=null;S.offer=null;S.reask=0;S.turns=0;S.fbAsked=false;S.lang='en';setLang('en');renderSlots();trace(raw,'reset');
+    S.slots={};S.stage='start';S.plan=false;S.awaiting=null;S.offer=null;S.reask=0;S.turns=0;S.fbAsked=false;S.hist=[];S.planWanted=false;S.aiFails=0;S.lang='en';setLang('en');renderSlots();trace(raw,'reset');
     return say("Certainly. How may I help you?");
   }
   /* chip with a prepared answer */
@@ -356,6 +357,11 @@ async function reply(raw,data={}){
   const m=matchIntent(n),slots=extractSlots(n),keys=Object.keys(slots);
   const hard=m&&['emergency','scope'].includes(m.it.id);
   if(hard)return runIntent(m.it,raw,m.score);
+  /* open conversation goes to the AI; instant small talk, human handoff and lead capture stay local */
+  if(S.ai&&!S.aiOff&&!(m&&(m.it.short||['lead','offerlead'].includes(m.it.act)))){
+    if(m&&m.it.id==='plan')S.planWanted=true;
+    if(await aiReply(raw,n))return;
+  }
   const planWord=m&&m.it.id==='plan';
   const strong=m&&m.score>=3,isQ=/\?|^(what|how|when|where|which|why|can|is|are|do|does|kya|kab|kaise|kitna|kitne|koto|kobe|kokhon|kothay|kon|keno|kemon|ki)\b/.test(n);
   /* is this an answer to the planner's question, or a fresh question that just mentions a slot word? */
@@ -402,6 +408,72 @@ async function send(text,data){
   busy=false;inp.focus();
 }
 $('#form').addEventListener('submit',e=>{e.preventDefault();send(inp.value)});
+/* =====================================================================
+   13. AI REPLIES (free Cloudflare Workers AI through a small Worker; rules are the fallback)
+   ===================================================================== */
+const AI_URL='https://dooars-chat.cleareasttravels.workers.dev/';
+S.ai=true;S.aiOff=false;S.aiFails=0;S.hist=[];S.planWanted=false;
+const ABOUT='We arrange Dooars trips. A human planner on our team confirms exact prices, availability and bookings; the assistant gives general guidance only.';
+const SMALLTALK=new Set(['greet','thanks','bye','wow','ok','yes','nope','later','confused','identity','scope','emergency']);
+const VALID={group:['Family','Couple','Friends','Solo'],interest:['Wildlife','Nature','Offbeat'],budget:['Budget','Comfort','Premium']};
+const scrub=t=>String(t).replace(/\+?\d[\d\s-]{7,}\d/g,'[number]').slice(0,500);
+function scriptKey(raw){return S.lang==='en'?'en':S.lang+(/[\u0900-\u097F\u0980-\u09FF]/.test(raw)?'-native':'-roman')}
+function gatherFacts(raw,n){
+  const words=n.split(' ').length,ranked=[];
+  for(const m of MATCH){
+    if(SMALLTALK.has(m.it.id)||!m.it.r.en.length)continue;
+    if(m.it.short&&words>4)continue;
+    let sc=0;for(const k of m.kws){if(k.re?k.re.test(n):n.includes(k.n))sc+=k.w}
+    if(sc>0)ranked.push({t:m.it.r.en.join(' '),sc});
+  }
+  ranked.sort((a,b)=>b.sc-a.sc);
+  const facts=ranked.slice(0,3).map(x=>x.t);
+  if(S.lang==='en'||!facts.length){const r=retrieve(raw);if(r)facts.push(r.c.ctx+': '+r.c.text)}
+  return [ABOUT,...facts];
+}
+function showTyping(){markRead();const ty=document.createElement('div');ty.className='typing';ty.innerHTML='<i></i><i></i><i></i>';chat.appendChild(ty);scrollDown();return ty}
+async function sayNow(text){for(const part of splitBubbles(text)){addMsg(part,'in');await sleep(280)}}
+function mergeState(st){
+  const before=JSON.stringify(S.slots);
+  if(st&&typeof st==='object'){
+    const d=parseInt(st.days,10);if(d>=1&&d<=7)S.slots.days=d;
+    for(const k of Object.keys(VALID)){if(VALID[k].includes(st[k]))S.slots[k]=st[k]}
+    if(MFULL.includes(st.month))S.slots.month=st.month;
+  }
+  return before!==JSON.stringify(S.slots);
+}
+async function aiReply(raw,n){
+  const body={lang:scriptKey(raw),messages:[...S.hist.slice(-8),{role:'user',content:scrub(raw)}],facts:gatherFacts(raw,n),state:S.slots};
+  const prevFull=ORDER.every(k=>S.slots[k]);
+  const ty=showTyping();let j=null,ms=0;
+  try{
+    const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),14000),t0=performance.now();
+    const r=await fetch(AI_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:ctl.signal});
+    clearTimeout(to);ms=Math.round(performance.now()-t0);if(r.ok)j=await r.json();
+  }catch(e){}
+  ty.remove();
+  if(!j||!j.reply){S.aiFails++;trace(raw,'AI unavailable, using rules',['fallback']);if(S.aiFails>=3){S.aiOff=true;trace('(system)','AI switched off for this session after 3 failures')}return false}
+  S.aiFails=0;S.awaiting=null;
+  const rule=extractSlots(n);              /* the rule-based reader double-checks clear facts in the message */
+  const changed=mergeState(j.state);
+  for(const k of ['days','group','interest','month','budget']){if(rule[k]&&!S.slots[k])S.slots[k]=rule[k]}
+  renderSlots();
+  trace(raw,'AI answer ('+String(j.model||'').split('/').pop()+', '+ms+' ms)',[j.action&&j.action!=='none'?'action: '+j.action:'conversation'],'language: '+body.lang+' · facts sent: '+Math.max(0,body.facts.length-1));
+  if(j.action==='plan')S.planWanted=true;
+  const full=ORDER.every(k=>S.slots[k]);
+  /* all five details are now known: show the plan straight away instead of the AI's reply (which may still ask for them) */
+  if(full&&!S.plan&&(S.planWanted||!prevFull)){
+    S.hist.push({role:'user',content:scrub(raw)},{role:'assistant',content:'I have prepared your plan below.'});S.hist=S.hist.slice(-12);
+    S.planWanted=false;await askNext();return true;
+  }
+  S.hist.push({role:'user',content:scrub(raw)},{role:'assistant',content:j.reply});S.hist=S.hist.slice(-12);
+  await sayNow(j.reply);
+  if(full&&S.plan&&changed){S.plan=false;await askNext();return true}   /* details changed after a plan: rebuild it */
+  if(j.action==='quote'){await startLead();return true}
+  if(j.action==='human')S.offer='lead';
+  return true;
+}
+
 /* =====================================================================
    10. FEEDBACK (thumbs up/down, what the bot could not answer)
    ===================================================================== */
@@ -483,13 +555,14 @@ let demoId=0;
 async function typeInto(t){for(let i=1;i<=t.length;i++){inp.value=t.slice(0,i);await sleep(28)}await sleep(350)}
 async function playDemo(k){
   const id=++demoId;while(busy)await sleep(100);
+  const aiWas=S.ai;S.ai=false;
   document.body.classList.add('demo');
   const bar=document.createElement('div');bar.className='demobar';bar.innerHTML='<span>▶ Demo playing</span><button type="button">Stop</button>';
   document.querySelector('.phone').appendChild(bar);bar.querySelector('button').onclick=()=>{demoId++};
   try{
     await send('Start over',{reset:true});
     for(const m of DEMOS[k]){if(id!==demoId)break;await typeInto(m);if(id!==demoId)break;await send(m);while(busy)await sleep(120);await sleep(1100)}
-  }finally{document.body.classList.remove('demo');bar.remove();inp.value=''}
+  }finally{S.ai=aiWas;document.body.classList.remove('demo');bar.remove();inp.value=''}
 }
 
 renderSlots();renderLeads();renderKb();renderTrace();renderFb();
