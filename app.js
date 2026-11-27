@@ -503,8 +503,52 @@ function gatherFacts(raw,n){
   if(S.lang==='en'||!facts.length){const r=retrieve(raw);if(r)facts.push(r.c.ctx+': '+r.c.text)}
   const extra=[];
   if(S.leadSaved||S.phone)extra.push('The customer has ALREADY shared their phone number (and name if given) with our team, who will contact them. Never ask for their name, number or contact details again.');
-  return [ABOUT,...extra,...facts];
+  return [ABOUT,...extra,...placeFacts(n),...facts];
 }
+/* =====================================================================
+   14. PLACE DATA (from the Dooars master database: places.js)
+   ===================================================================== */
+const PLACES=window.PLACES||[],SAFARI=window.SAFARI||[],ROUTES=window.ROUTES||[];
+/* names that are also everyday words are only matched when written with a capital or as part of a longer name */
+const AMBIG=new Set(['today','paren','mal','bala']);
+const PLACE_RX=PLACES.map(p=>({p,res:[p.n,...p.alt].map(x=>norm(x)).filter(x=>x&&!AMBIG.has(x)).map(x=>new RegExp('(?:^| )'+reEsc(x)+'(?= |$)'))}));
+function findPlaces(n){const hit=[];for(const {p,res} of PLACE_RX){if(res.some(r=>r.test(n)))hit.push(p)}
+  /* prefer the longest name ("New Mal Junction" over "Mal") and keep two at most */
+  return hit.sort((a,b)=>b.n.length-a.n.length).slice(0,2)}
+const km=x=>x==null?'':(x<1?Math.round(x*1000)+' m':x+' km');
+function placeText(p){
+  const t=[`${p.n} (${p.kind}, ${p.area})`];
+  const g=ROUTES.filter(r=>r.to===p.n);
+  if(g.length)t.push('by road (Google Maps): '+g.map(r=>`${r.from} to ${p.n} ${r.google_road_km} km, about ${r.google_drive_time}`+(r.via?' via '+r.via:'')).join('; '));
+  else if(p.road&&p.road.NJP&&p.road.NJP[0]>0)t.push(`by road about ${p.road.NJP[0]} km from NJP station`+(p.road['Bagdogra airport']?` and ${p.road['Bagdogra airport'][0]} km from Bagdogra airport`:'')+' (computer estimate; allow extra time for real driving)');
+  if(p.stn)t.push(`nearest railway station ${p.stn[0]} (${km(p.stn[1])} straight line)`);
+  if(p.hosp)t.push(`nearest mapped hospital or clinic: ${p.hosp[0]} (${km(p.hosp[1])} straight line)`);
+  t.push(`ATMs/banks within 5 km: ${p.atm5}; fuel pumps within 10 km: ${p.fuel10}`);
+  if(p.stays&&p.stays.length)t.push('well-reviewed stays nearby: '+p.stays.map(s=>`${s[0]} (${s[1]}${s[2]?', listed from ₹'+s[2]+' a night':''}, ${km(s[3])})`).join('; '));
+  if(p.see&&p.see.length)t.push('things to see nearby: '+p.see.map(s=>`${s[0]} (${km(s[1])})`).join('; '));
+  if(p.food&&p.food.length)t.push('places to eat nearby: '+p.food.map(s=>`${s[0]} (${km(s[1])})`).join('; '));
+  if(p.nearby)t.push('closest places by road: '+p.nearby);
+  return t.join('. ')+'. (Map data; prices are one listed nightly rate and change.)';
+}
+const SAF_RX=/\b(safari|jeep|gypsy|jipsy|elephant ride|hathi|hati|slot|timing|timings|samay|shomoy)\b/;
+function safariText(div){
+  const rows=SAFARI.filter(s=>s.wildlife_division.startsWith(div));if(!rows.length)return null;
+  const by={};rows.forEach(s=>{const k=s.safari_type+': '+s.safari_name+' (report at '+s.reporting_place+', '+s.reporting_time+')';(by[k]=by[k]||[]).push(s.slot_start+'-'+s.slot_end+' ₹'+s.total_rate_inr)});
+  return `${div} official forest-department safari slots (WBSFDA booking site, checked ${rows[0].checked_on}; rate = road charge + entry fee, Indian rate, vehicle hire not included): `+Object.entries(by).slice(0,6).map(([k,v])=>k+': '+v.join(', ')).join(' | ');
+}
+function placeFacts(n){
+  const out=[],ps=findPlaces(n);ps.forEach(p=>out.push(placeText(p)));
+  if(SAF_RX.test(n)){
+    const want=new Set();
+    if(/gorumara|lataguri|chapramari|medla|jatraprasad|chukchuki|chandrachur/.test(n)||ps.some(p=>/Gorumara|Chapramari/.test(p.area)))want.add('Gorumara');
+    if(/jaldapara|madarihat|hollong|holong|salkumar|chilapata|hasimara/.test(n)||ps.some(p=>/Jaldapara|Chilapata/.test(p.area)))want.add('Jaldapara');
+    if(!want.size){want.add('Gorumara');want.add('Jaldapara')}
+    want.forEach(d=>{const t=safariText(d);if(t)out.push(t)});
+  }
+  if(ps.length)trace('(data)','place data: '+ps.map(p=>p.n).join(', '));
+  return out;
+}
+
 function showTyping(){markRead();const ty=document.createElement('div');ty.className='typing';ty.innerHTML='<i></i><i></i><i></i>';chat.appendChild(ty);scrollDown();return ty}
 async function sayNow(text){for(const part of splitBubbles(text)){addMsg(part,'in');await sleep(280)}}
 function mergeState(st){
