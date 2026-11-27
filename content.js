@@ -7,9 +7,9 @@ const T=(id,kw,en,hi,bn,o={})=>INTENTS.push({id,kw:kw.toLowerCase().split('|').m
 
 /* ---------- small talk and reactions ---------- */
 T('greet','hi|hello|hey|hii|hiii|helo|good morning|good evening|namaste|namaskar|nomoskar|nomoshkar|pranam|salaam|hola|kemon acho|kemon achen|kaise ho|kya haal|नमस्ते|नमस्कार|হ্যালো|নমস্কার|হাই',
- ["Hi! 👋 Welcome. I'm the Dooars trip assistant.","Planning a trip to the Dooars? Ask me anything, or tap an option below."],
- ["Namaste! 👋 Main Dooars trip assistant hoon.","Dooars ghoomne ka plan hai? Kuch bhi poochiye, ya neeche se chuniye."],
- ["Nomoskar! 👋 Ami Dooars trip assistant.","Dooars ghurte jaite chan? Jekono proshno korun, ba niche theke bachun."],
+ ["Hi! 👋 Welcome. I'm the GoDooars trip assistant.","Planning a trip to the Dooars? Ask me anything, or tap an option below."],
+ ["Namaste! 👋 Main GoDooars trip assistant hoon.","Dooars ghoomne ka plan hai? Kuch bhi poochiye, ya neeche se chuniye."],
+ ["Nomoskar! 👋 Ami GoDooars trip assistant.","Dooars ghurte jaite chan? Jekono proshno korun, ba niche theke bachun."],
  {short:true,next:['plan','besttime','reach','price']});
 T('thanks','thanks|thank you|thankyou|thx|tysm|shukriya|dhanyavaad|dhanyabad|dhonnobad|dhonyobad|bohot accha|bahut accha|great help|helpful|धन्यवाद|शुक्रिया|ধন্যবাদ|ধন্যবাদ',
  ["You're welcome! 😊 Anything else you'd like to know?"],["Koi baat nahi! 😊 Aur kuch poochna ho to bataiye."],["Kono byapar na! 😊 Aro kichu jante chaile bolun."],{short:true,next:['plan','price','human']});
@@ -300,7 +300,7 @@ add('scope','राजनीति|चुनाव|विधायक|सां�
 /* ---------- formal tone layer: courteous English, no emoji (overrides the earlier drafts above) ---------- */
 (()=>{
 const EN={
-greet:["Hello, and welcome. I am the Dooars trip assistant.","How may I help you today? You may ask a question or choose an option below."],
+greet:["Hello, and welcome. I am the GoDooars trip assistant.","How may I help you today? You may ask a question or choose an option below."],
 thanks:["You are welcome. Is there anything else I can help you with?"],
 bye:["Thank you for your time. Please feel free to return whenever you wish."],
 wow:["I am glad to hear that. Would you like me to prepare a trip plan for you?"],

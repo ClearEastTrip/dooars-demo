@@ -2,6 +2,8 @@
    Understands English, Hinglish (Roman Hindi), Banglish (Roman Bengali) and Hindi/Bangla script; replies in the customer's language.
    Curated answers first (content.js), sourced knowledge base (kb.js) as an English-only fallback. No server, no API keys. */
 const $=s=>document.querySelector(s);
+/* QR visitors get a clean chat. Add ?demo to the link (for pitches) to show the 'behind the scenes' panel and demo scripts. */
+const DEMO_MODE=/[?&]demo\b/.test(location.search);if(!DEMO_MODE)document.body.classList.add('public');
 const chat=$('#chat'),inp=$('#inp');
 const KB=window.KB||[],INTENTS=window.INTENTS||[];
 
@@ -256,6 +258,19 @@ function exportCsv(){const a=getLeads();const csv='name,phone,plan,lang,time\n'+
 function clearLeads(){setLeads([]);renderLeads()}
 /* The team's public contact details. Leave empty until the real number is confirmed; the bot never invents one. */
 const CONTACT={whatsapp:'',phone:'',hours:''};
+/* Lead handoff: saved leads live only on the visitor's own phone, so the team never sees them.
+   When CONTACT.whatsapp is set (digits with country code, e.g. '919800000000'), the bot shows a button that opens
+   WhatsApp to the GoDooars number with the enquiry already typed, so the lead actually reaches the team. */
+const waNum=()=>String(CONTACT.whatsapp||'').replace(/\D/g,'');
+function leadText(){const sl=S.slots;return `Hi GoDooars, I'd like help with a Dooars trip.\nName: ${S.name||'-'}\nPhone: ${S.phone||'-'}`+(S.plan?`\nPlan: ${sl.days} days, ${sl.group}, ${sl.interest}, ${sl.month}, ${sl.budget}`:'')+`\nLanguage: ${LANGNAME[S.lang]}`}
+const WA_T={btn:['Send my details on WhatsApp','Details WhatsApp par bhejein','Details WhatsApp-e pathan'],
+  note:['Please tap the button so our team receives your enquiry right away.','Kripya button dabaiye, taaki hamari team ko aapki enquiry turant mil jaye.','Doya kore button-e tap korun, jate amader team apnar enquiry sathe sathe pay.']};
+async function leadDone(name,li){
+  await say(LS.saved(name)[li]);
+  if(!waNum())return;
+  addCard(`<div>${esc(WA_T.note[li])}</div><div class="cta"><a class="btn" href="https://wa.me/${waNum()}?text=${encodeURIComponent(leadText())}" target="_blank" rel="noopener noreferrer">${esc(WA_T.btn[li])}</a></div>`);
+  trace('(lead)','WhatsApp handoff offered',['customer sends it to the team']);
+}
 function findPhone(t){const m=String(t).match(/(?:\+?\d{1,3}[\s-]?)?(?:\d[\s-]?){9,12}\d/);if(!m)return null;const d=m[0].replace(/\D/g,'');return d.length>=10&&d.length<=13?m[0].trim():null}
 function findName(t){const m=String(t).match(/(?:my name is|name is|this is|mera naam|mera nam|amar naam|amar nam|naam hai|नाम|নাম)\s+([A-Za-z\u0900-\u097F\u0980-\u09FF][A-Za-z\u0900-\u097F\u0980-\u09FF .'-]{0,28})/i);return m?m[1].trim().replace(/\s+(and|aur|ar|here|hai)\b.*$/i,''):null}
 function saveLead(){
@@ -278,7 +293,7 @@ async function startLead(intro){
   trace('(lead)','lead capture started',['no booking promises']);
   if(intro)await say(intro);
   if(S.leadSaved&&S.phone){S.stage=S.plan?'plan':'ask';return say(LS.already(S.phone)[li])}
-  if(S.name&&S.phone){saveLead();S.stage=S.plan?'plan':'ask';return say(LS.saved(S.name)[li])}
+  if(S.name&&S.phone){saveLead();S.stage=S.plan?'plan':'ask';return leadDone(S.name,li)}
   if(S.phone){S.stage='lead_name';return say(LS.askNameOnly[li])}
   if(S.name){S.stage='lead_phone';return say(LS.phone(S.name)[li])}
   S.stage='lead_name';return say(LS.name[li]);
@@ -380,11 +395,11 @@ async function reply(raw,data={}){
         let nm=raw;if(ph0){S.phone=ph0.slice(0,20);nm=raw.replace(ph0,' ').replace(/[,.:;]/g,' ').replace(/\s+/g,' ').trim()}
         if(nm)S.name=(findName(nm)||nm).slice(0,60);
         trace(raw,'lead: name captured');
-        if(S.phone){saveLead();S.stage=S.plan?'plan':'ask';return say(LS.saved(S.name||'')[LI[S.lang]])}
+        if(S.phone){saveLead();S.stage=S.plan?'plan':'ask';return leadDone(S.name||'',LI[S.lang])}
         S.stage='lead_phone';return say(LS.phone(S.name)[LI[S.lang]])}
       S.stage=S.plan?'plan':'ask';   /* a question, not a name: leave the form and answer it */
     }else{
-      if(ph0||raw.replace(/\D/g,'').length>=8){S.phone=(ph0||raw.trim()).slice(0,20);saveLead();S.stage=S.plan?'plan':'ask';return say(LS.saved(S.name||'')[LI[S.lang]])}
+      if(ph0||raw.replace(/\D/g,'').length>=8){S.phone=(ph0||raw.trim()).slice(0,20);saveLead();S.stage=S.plan?'plan':'ask';return leadDone(S.name||'',LI[S.lang])}
       if(!looksLikeQuestion){trace(raw,'lead: invalid phone',['validate:phone']);return say(LS.badphone[LI[S.lang]])}
       S.stage=S.plan?'plan':'ask';
     }
@@ -402,7 +417,7 @@ async function reply(raw,data={}){
       if(!S.name){const left=raw.replace(ph,' ').replace(/[,.:;\-]/g,' ').replace(/\s+/g,' ').trim();
         if(left&&left.split(' ').length<=3&&/^[A-Za-z\u0900-\u097F\u0980-\u09FF][A-Za-z\u0900-\u097F\u0980-\u09FF .'-]{0,30}$/.test(left))S.name=left.slice(0,40)}
       const rest=n.replace(/[\d\s+-]{8,}/g,' ').trim().split(' ').filter(Boolean).length;
-      if(rest<=3){ if(S.name){saveLead();return say(LS.saved(S.name)[li0])} S.stage='lead_name';return say(LS.thanksPhone[li0]) }
+      if(rest<=3){ if(S.name){saveLead();return leadDone(S.name,li0)} S.stage='lead_name';return say(LS.thanksPhone[li0]) }
       saveLead();
     }
   }
@@ -445,7 +460,7 @@ async function reply(raw,data={}){
 
 async function welcome(){
   await typing(700);
-  const d=addCard(`<div class="lead">Hello. Nomoskar · Namaste</div><div>I am the Dooars trip assistant.</div><div>I plan trips and answer questions about parks, stays, travel and costs. You may write in English, <b>Bangla</b> or <b>Hindi</b> (Roman or script), whichever is most convenient.</div>
+  const d=addCard(`<div class="lead">Hello. Nomoskar · Namaste</div><div>I am the GoDooars trip assistant.</div><div>I plan trips and answer questions about parks, stays, travel and costs. You may write in English, <b>Bangla</b> or <b>Hindi</b> (Roman or script), whichever is most convenient.</div>
    <div class="tiles"><button class="tile" data-i="plan"><b>Plan my trip</b><small>Day-by-day in a minute</small></button>
    <button class="tile" data-i="besttime"><b>Best time</b><small>Seasons & monsoon</small></button>
    <button class="tile" data-i="reach"><b>Getting there</b><small>Train, flight, road</small></button>
@@ -565,7 +580,7 @@ function feedbackText(){
   if(S.unans.length)t+='\nBot could not answer:\n'+S.unans.map(q=>`- "${q}"`).join('\n')+'\n';
   return t+'\nMy comment: ';
 }
-function sendFeedback(){window.open('https://wa.me/?text='+encodeURIComponent(feedbackText()),'_blank','noopener')}
+function sendFeedback(){window.open('https://wa.me/'+waNum()+'?text='+encodeURIComponent(feedbackText()),'_blank','noopener')}
 function renderFb(){
   const up=S.fb.filter(f=>f.v>0).length,dn=S.fb.filter(f=>f.v<0);
   $('#p-fb').innerHTML=`<div class="fbstat"><div><b>${up}</b><small>👍 helpful</small></div><div><b>${dn.length}</b><small>👎 not helpful</small></div><div><b>${S.unans.length}</b><small>unanswered</small></div></div>
