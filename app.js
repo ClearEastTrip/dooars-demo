@@ -139,7 +139,7 @@ const LABEL={days:'Days',group:'Who',interest:'Interest',month:'Month',budget:'B
 function renderSlots(){$('#slots').innerHTML=ORDER.map(k=>{const v=S.slots[k];return `<div class="slot ${v?'on':''}">${LABEL[k]}<b>${v?esc(String(v)):'–'}</b></div>`}).join('');
   $('#prog').style.width=(ORDER.filter(k=>S.slots[k]).length/ORDER.length*100)+'%'}
 const traces=[];
-function trace(q,route,rules=[],extra=''){traces.unshift({q,route,rules,extra,lang:S.lang});renderTrace()}
+function trace(q,route,rules=[],extra=''){traces.unshift({q,route,rules,extra,lang:S.lang});if(q&&q[0]!=='(')S.route=route;renderTrace()}
 function renderTrace(){$('#p-trace').innerHTML=traces.slice(0,8).map(t=>`<div class="trace"><q>“${esc(t.q.slice(0,70))}”</q><span class="route">${esc(t.lang.toUpperCase())} · ${esc(t.route)}</span>
   ${t.rules.map(r=>`<span class="rule">${esc(r)}</span>`).join('')}${t.extra?`<div style="color:var(--muted);margin-top:3px">${esc(t.extra)}</div>`:''}</div>`).join('')||'<div class="empty">Nothing yet.</div>'}
 function renderKb(){
@@ -472,7 +472,8 @@ async function send(text,data){
   text=(text||'').trim();if(!text||busy)return;busy=true;clearChips();addMsg(text,'out');inp.value='';S.turns=(S.turns||0)+1;
   const inBefore=chat.querySelectorAll('.msg.in').length;S.lastAI=false;
   document.body.classList.remove('sheet');
-  try{await reply(text,data||{});
+  S.route='';S.places=[];const wasLead=(S.stage||'').startsWith('lead');
+  try{await reply(text,data||{});if(!wasLead)logTurn(text,data);
     /* turns answered by the rules are also remembered, so the AI never loses the thread */
     if(!S.lastAI&&!(S.stage||'').startsWith('lead')){const t=[...chat.querySelectorAll('.msg.in')].slice(inBefore).map(m=>m.innerText.replace(/\d{1,2}:\d{2}\s?[AP]M/g,'').trim()).join(' ');if(t){S.hist.push({role:'user',content:scrub(text)},{role:'assistant',content:scrub(t).slice(0,400)});S.hist=S.hist.slice(-12)}}
     await maybeFeedback()}catch(e){console.error(e);addMsg('Something went wrong. Please try again.','in')}
@@ -505,6 +506,26 @@ function gatherFacts(raw,n){
   if(S.leadSaved||S.phone)extra.push('The customer has ALREADY shared their phone number (and name if given) with our team, who will contact them. Never ask for their name, number or contact details again.');
   return [ABOUT,...extra,...placeFacts(n),...facts];
 }
+/* =====================================================================
+   15. PRIVATE USAGE LOG (for GoDooars only; see worker/log-worker.js)
+   Leave LOG_URL empty and nothing is sent. Numbers and the visitor's name are masked first.
+   Add ?src=<place> to a QR link (e.g. ?src=lataguri-homestay) to count scans per location.
+   ===================================================================== */
+const LOG_URL='';
+const SRC=(new URLSearchParams(location.search).get('src')||'direct').toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,40)||'direct';
+const SID=Math.random().toString(36).slice(2,12);
+function logEvent(o){
+  if(!LOG_URL||DEMO_MODE)return;
+  try{const body=JSON.stringify({sid:SID,src:SRC,...o});
+    /* text/plain avoids a CORS preflight; sendBeacon survives the visitor closing the page */
+    if(!(navigator.sendBeacon&&navigator.sendBeacon(LOG_URL,new Blob([body],{type:'text/plain'}))))fetch(LOG_URL,{method:'POST',body,keepalive:true,headers:{'Content-Type':'text/plain'}}).catch(()=>{})}catch(e){}
+}
+function logTurn(text,data){
+  if((S.stage||'').startsWith('lead'))return;           /* never log what is typed into the name/number steps */
+  const route=S.route||'',answered=!/no confident match|not understood/.test(route);
+  logEvent({t:'q',q:scrub(text).slice(0,300),lang:S.lang,route:route.slice(0,60),answered,places:(S.places||[]).join('|'),chip:!!(data&&(data.intent||data.set))});
+}
+
 /* =====================================================================
    14. PLACE DATA (from the Dooars master database: places.js)
    ===================================================================== */
@@ -545,7 +566,7 @@ function placeFacts(n){
     if(!want.size){want.add('Gorumara');want.add('Jaldapara')}
     want.forEach(d=>{const t=safariText(d);if(t)out.push(t)});
   }
-  if(ps.length)trace('(data)','place data: '+ps.map(p=>p.n).join(', '));
+  if(ps.length){S.places=ps.map(p=>p.n);trace('(data)','place data: '+S.places.join(', '))}
   return out;
 }
 
@@ -657,4 +678,4 @@ async function playDemo(k){
 }
 
 renderSlots();renderLeads();renderKb();renderTrace();renderFb();
-setLang('en');welcome();
+setLang('en');welcome();logEvent({t:'open',ref:(document.referrer||'').slice(0,100)});
