@@ -2,6 +2,8 @@
    Understands English, Hinglish (Roman Hindi), Banglish (Roman Bengali) and Hindi/Bangla script; replies in the customer's language.
    Curated answers first (content.js), sourced knowledge base (kb.js) as an English-only fallback. No server, no API keys. */
 const $=s=>document.querySelector(s);
+/* QR visitors get a clean chat. Add ?demo to the link (for pitches) to show the 'behind the scenes' panel and demo scripts. */
+const DEMO_MODE=/[?&]demo\b/.test(location.search);if(!DEMO_MODE)document.body.classList.add('public');
 const chat=$('#chat'),inp=$('#inp');
 const KB=window.KB||[],INTENTS=window.INTENTS||[];
 
@@ -137,7 +139,7 @@ const LABEL={days:'Days',group:'Who',interest:'Interest',month:'Month',budget:'B
 function renderSlots(){$('#slots').innerHTML=ORDER.map(k=>{const v=S.slots[k];return `<div class="slot ${v?'on':''}">${LABEL[k]}<b>${v?esc(String(v)):'–'}</b></div>`}).join('');
   $('#prog').style.width=(ORDER.filter(k=>S.slots[k]).length/ORDER.length*100)+'%'}
 const traces=[];
-function trace(q,route,rules=[],extra=''){traces.unshift({q,route,rules,extra,lang:S.lang});renderTrace()}
+function trace(q,route,rules=[],extra=''){traces.unshift({q,route,rules,extra,lang:S.lang});if(q&&q[0]!=='(')S.route=route;renderTrace()}
 function renderTrace(){$('#p-trace').innerHTML=traces.slice(0,8).map(t=>`<div class="trace"><q>“${esc(t.q.slice(0,70))}”</q><span class="route">${esc(t.lang.toUpperCase())} · ${esc(t.route)}</span>
   ${t.rules.map(r=>`<span class="rule">${esc(r)}</span>`).join('')}${t.extra?`<div style="color:var(--muted);margin-top:3px">${esc(t.extra)}</div>`:''}</div>`).join('')||'<div class="empty">Nothing yet.</div>'}
 function renderKb(){
@@ -256,6 +258,19 @@ function exportCsv(){const a=getLeads();const csv='name,phone,plan,lang,time\n'+
 function clearLeads(){setLeads([]);renderLeads()}
 /* The team's public contact details. Leave empty until the real number is confirmed; the bot never invents one. */
 const CONTACT={whatsapp:'',phone:'',hours:''};
+/* Lead handoff: saved leads live only on the visitor's own phone, so the team never sees them.
+   When CONTACT.whatsapp is set (digits with country code, e.g. '919800000000'), the bot shows a button that opens
+   WhatsApp to the GoDooars number with the enquiry already typed, so the lead actually reaches the team. */
+const waNum=()=>String(CONTACT.whatsapp||'').replace(/\D/g,'');
+function leadText(){const sl=S.slots;return `Hi GoDooars, I'd like help with a Dooars trip.\nName: ${S.name||'-'}\nPhone: ${S.phone||'-'}`+(S.plan?`\nPlan: ${sl.days} days, ${sl.group}, ${sl.interest}, ${sl.month}, ${sl.budget}`:'')+`\nLanguage: ${LANGNAME[S.lang]}`}
+const WA_T={btn:['Send my details on WhatsApp','Details WhatsApp par bhejein','Details WhatsApp-e pathan'],
+  note:['Please tap the button so our team receives your enquiry right away.','Kripya button dabaiye, taaki hamari team ko aapki enquiry turant mil jaye.','Doya kore button-e tap korun, jate amader team apnar enquiry sathe sathe pay.']};
+async function leadDone(name,li){
+  await say(LS.saved(name)[li]);
+  if(!waNum())return;
+  addCard(`<div>${esc(WA_T.note[li])}</div><div class="cta"><a class="btn" href="https://wa.me/${waNum()}?text=${encodeURIComponent(leadText())}" target="_blank" rel="noopener noreferrer">${esc(WA_T.btn[li])}</a></div>`);
+  trace('(lead)','WhatsApp handoff offered',['customer sends it to the team']);
+}
 function findPhone(t){const m=String(t).match(/(?:\+?\d{1,3}[\s-]?)?(?:\d[\s-]?){9,12}\d/);if(!m)return null;const d=m[0].replace(/\D/g,'');return d.length>=10&&d.length<=13?m[0].trim():null}
 function findName(t){const m=String(t).match(/(?:my name is|name is|this is|mera naam|mera nam|amar naam|amar nam|naam hai|नाम|নাম)\s+([A-Za-z\u0900-\u097F\u0980-\u09FF][A-Za-z\u0900-\u097F\u0980-\u09FF .'-]{0,28})/i);return m?m[1].trim().replace(/\s+(and|aur|ar|here|hai)\b.*$/i,''):null}
 function saveLead(){
@@ -278,7 +293,7 @@ async function startLead(intro){
   trace('(lead)','lead capture started',['no booking promises']);
   if(intro)await say(intro);
   if(S.leadSaved&&S.phone){S.stage=S.plan?'plan':'ask';return say(LS.already(S.phone)[li])}
-  if(S.name&&S.phone){saveLead();S.stage=S.plan?'plan':'ask';return say(LS.saved(S.name)[li])}
+  if(S.name&&S.phone){saveLead();S.stage=S.plan?'plan':'ask';return leadDone(S.name,li)}
   if(S.phone){S.stage='lead_name';return say(LS.askNameOnly[li])}
   if(S.name){S.stage='lead_phone';return say(LS.phone(S.name)[li])}
   S.stage='lead_name';return say(LS.name[li]);
@@ -380,11 +395,11 @@ async function reply(raw,data={}){
         let nm=raw;if(ph0){S.phone=ph0.slice(0,20);nm=raw.replace(ph0,' ').replace(/[,.:;]/g,' ').replace(/\s+/g,' ').trim()}
         if(nm)S.name=(findName(nm)||nm).slice(0,60);
         trace(raw,'lead: name captured');
-        if(S.phone){saveLead();S.stage=S.plan?'plan':'ask';return say(LS.saved(S.name||'')[LI[S.lang]])}
+        if(S.phone){saveLead();S.stage=S.plan?'plan':'ask';return leadDone(S.name||'',LI[S.lang])}
         S.stage='lead_phone';return say(LS.phone(S.name)[LI[S.lang]])}
       S.stage=S.plan?'plan':'ask';   /* a question, not a name: leave the form and answer it */
     }else{
-      if(ph0||raw.replace(/\D/g,'').length>=8){S.phone=(ph0||raw.trim()).slice(0,20);saveLead();S.stage=S.plan?'plan':'ask';return say(LS.saved(S.name||'')[LI[S.lang]])}
+      if(ph0||raw.replace(/\D/g,'').length>=8){S.phone=(ph0||raw.trim()).slice(0,20);saveLead();S.stage=S.plan?'plan':'ask';return leadDone(S.name||'',LI[S.lang])}
       if(!looksLikeQuestion){trace(raw,'lead: invalid phone',['validate:phone']);return say(LS.badphone[LI[S.lang]])}
       S.stage=S.plan?'plan':'ask';
     }
@@ -402,7 +417,7 @@ async function reply(raw,data={}){
       if(!S.name){const left=raw.replace(ph,' ').replace(/[,.:;\-]/g,' ').replace(/\s+/g,' ').trim();
         if(left&&left.split(' ').length<=3&&/^[A-Za-z\u0900-\u097F\u0980-\u09FF][A-Za-z\u0900-\u097F\u0980-\u09FF .'-]{0,30}$/.test(left))S.name=left.slice(0,40)}
       const rest=n.replace(/[\d\s+-]{8,}/g,' ').trim().split(' ').filter(Boolean).length;
-      if(rest<=3){ if(S.name){saveLead();return say(LS.saved(S.name)[li0])} S.stage='lead_name';return say(LS.thanksPhone[li0]) }
+      if(rest<=3){ if(S.name){saveLead();return leadDone(S.name,li0)} S.stage='lead_name';return say(LS.thanksPhone[li0]) }
       saveLead();
     }
   }
@@ -445,7 +460,7 @@ async function reply(raw,data={}){
 
 async function welcome(){
   await typing(700);
-  const d=addCard(`<div class="lead">Hello. Nomoskar · Namaste</div><div>I am the Dooars trip assistant.</div><div>I plan trips and answer questions about parks, stays, travel and costs. You may write in English, <b>Bangla</b> or <b>Hindi</b> (Roman or script), whichever is most convenient.</div>
+  const d=addCard(`<div class="lead">Hello. Nomoskar · Namaste</div><div>I am the GoDooars trip assistant.</div><div>I plan trips and answer questions about parks, stays, travel and costs. You may write in English, <b>Bangla</b> or <b>Hindi</b> (Roman or script), whichever is most convenient.</div>
    <div class="tiles"><button class="tile" data-i="plan"><b>Plan my trip</b><small>Day-by-day in a minute</small></button>
    <button class="tile" data-i="besttime"><b>Best time</b><small>Seasons & monsoon</small></button>
    <button class="tile" data-i="reach"><b>Getting there</b><small>Train, flight, road</small></button>
@@ -457,7 +472,8 @@ async function send(text,data){
   text=(text||'').trim();if(!text||busy)return;busy=true;clearChips();addMsg(text,'out');inp.value='';S.turns=(S.turns||0)+1;
   const inBefore=chat.querySelectorAll('.msg.in').length;S.lastAI=false;
   document.body.classList.remove('sheet');
-  try{await reply(text,data||{});
+  S.route='';S.places=[];const wasLead=(S.stage||'').startsWith('lead');
+  try{await reply(text,data||{});if(!wasLead)logTurn(text,data);
     /* turns answered by the rules are also remembered, so the AI never loses the thread */
     if(!S.lastAI&&!(S.stage||'').startsWith('lead')){const t=[...chat.querySelectorAll('.msg.in')].slice(inBefore).map(m=>m.innerText.replace(/\d{1,2}:\d{2}\s?[AP]M/g,'').trim()).join(' ');if(t){S.hist.push({role:'user',content:scrub(text)},{role:'assistant',content:scrub(t).slice(0,400)});S.hist=S.hist.slice(-12)}}
     await maybeFeedback()}catch(e){console.error(e);addMsg('Something went wrong. Please try again.','in')}
@@ -488,8 +504,72 @@ function gatherFacts(raw,n){
   if(S.lang==='en'||!facts.length){const r=retrieve(raw);if(r)facts.push(r.c.ctx+': '+r.c.text)}
   const extra=[];
   if(S.leadSaved||S.phone)extra.push('The customer has ALREADY shared their phone number (and name if given) with our team, who will contact them. Never ask for their name, number or contact details again.');
-  return [ABOUT,...extra,...facts];
+  return [ABOUT,...extra,...placeFacts(n),...facts];
 }
+/* =====================================================================
+   15. PRIVATE USAGE LOG (for GoDooars only; see worker/log-worker.js)
+   Leave LOG_URL empty and nothing is sent. Numbers and the visitor's name are masked first.
+   Add ?src=<place> to a QR link (e.g. ?src=lataguri-homestay) to count scans per location.
+   ===================================================================== */
+const LOG_URL='';
+const SRC=(new URLSearchParams(location.search).get('src')||'direct').toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,40)||'direct';
+const SID=Math.random().toString(36).slice(2,12);
+function logEvent(o){
+  if(!LOG_URL||DEMO_MODE)return;
+  try{const body=JSON.stringify({sid:SID,src:SRC,...o});
+    /* text/plain avoids a CORS preflight; sendBeacon survives the visitor closing the page */
+    if(!(navigator.sendBeacon&&navigator.sendBeacon(LOG_URL,new Blob([body],{type:'text/plain'}))))fetch(LOG_URL,{method:'POST',body,keepalive:true,headers:{'Content-Type':'text/plain'}}).catch(()=>{})}catch(e){}
+}
+function logTurn(text,data){
+  if((S.stage||'').startsWith('lead'))return;           /* never log what is typed into the name/number steps */
+  const route=S.route||'',answered=!/no confident match|not understood/.test(route);
+  logEvent({t:'q',q:scrub(text).slice(0,300),lang:S.lang,route:route.slice(0,60),answered,places:(S.places||[]).join('|'),chip:!!(data&&(data.intent||data.set))});
+}
+
+/* =====================================================================
+   14. PLACE DATA (from the Dooars master database: places.js)
+   ===================================================================== */
+const PLACES=window.PLACES||[],SAFARI=window.SAFARI||[],ROUTES=window.ROUTES||[];
+/* names that are also everyday words are only matched when written with a capital or as part of a longer name */
+const AMBIG=new Set(['today','paren','mal','bala']);
+const PLACE_RX=PLACES.map(p=>({p,res:[p.n,...p.alt].map(x=>norm(x)).filter(x=>x&&!AMBIG.has(x)).map(x=>new RegExp('(?:^| )'+reEsc(x)+'(?= |$)'))}));
+function findPlaces(n){const hit=[];for(const {p,res} of PLACE_RX){if(res.some(r=>r.test(n)))hit.push(p)}
+  /* prefer the longest name ("New Mal Junction" over "Mal") and keep two at most */
+  return hit.sort((a,b)=>b.n.length-a.n.length).slice(0,2)}
+const km=x=>x==null?'':(x<1?Math.round(x*1000)+' m':x+' km');
+function placeText(p){
+  const t=[`${p.n} (${p.kind}, ${p.area})`];
+  const g=ROUTES.filter(r=>r.to===p.n);
+  if(g.length)t.push('by road (Google Maps): '+g.map(r=>`${r.from} to ${p.n} ${r.google_road_km} km, about ${r.google_drive_time}`+(r.via?' via '+r.via:'')).join('; '));
+  else if(p.road&&p.road.NJP&&p.road.NJP[0]>0)t.push(`by road about ${p.road.NJP[0]} km from NJP station`+(p.road['Bagdogra airport']?` and ${p.road['Bagdogra airport'][0]} km from Bagdogra airport`:'')+' (computer estimate; allow extra time for real driving)');
+  if(p.stn)t.push(`nearest railway station ${p.stn[0]} (${km(p.stn[1])} straight line)`);
+  if(p.hosp)t.push(`nearest mapped hospital or clinic: ${p.hosp[0]} (${km(p.hosp[1])} straight line)`);
+  t.push(`ATMs/banks within 5 km: ${p.atm5}; fuel pumps within 10 km: ${p.fuel10}`);
+  if(p.stays&&p.stays.length)t.push('well-reviewed stays nearby: '+p.stays.map(s=>`${s[0]} (${s[1]}${s[2]?', listed from ₹'+s[2]+' a night':''}, ${km(s[3])})`).join('; '));
+  if(p.see&&p.see.length)t.push('things to see nearby: '+p.see.map(s=>`${s[0]} (${km(s[1])})`).join('; '));
+  if(p.food&&p.food.length)t.push('places to eat nearby: '+p.food.map(s=>`${s[0]} (${km(s[1])})`).join('; '));
+  if(p.nearby)t.push('closest places by road: '+p.nearby);
+  return t.join('. ')+'. (Map data; prices are one listed nightly rate and change.)';
+}
+const SAF_RX=/\b(safari|jeep|gypsy|jipsy|elephant ride|hathi|hati|slot|timing|timings|samay|shomoy)\b/;
+function safariText(div){
+  const rows=SAFARI.filter(s=>s.wildlife_division.startsWith(div));if(!rows.length)return null;
+  const by={};rows.forEach(s=>{const k=s.safari_type+': '+s.safari_name+' (report at '+s.reporting_place+', '+s.reporting_time+')';(by[k]=by[k]||[]).push(s.slot_start+'-'+s.slot_end+' ₹'+s.total_rate_inr)});
+  return `${div} official forest-department safari slots (WBSFDA booking site, checked ${rows[0].checked_on}; rate = road charge + entry fee, Indian rate, vehicle hire not included): `+Object.entries(by).slice(0,6).map(([k,v])=>k+': '+v.join(', ')).join(' | ');
+}
+function placeFacts(n){
+  const out=[],ps=findPlaces(n);ps.forEach(p=>out.push(placeText(p)));
+  if(SAF_RX.test(n)){
+    const want=new Set();
+    if(/gorumara|lataguri|chapramari|medla|jatraprasad|chukchuki|chandrachur/.test(n)||ps.some(p=>/Gorumara|Chapramari/.test(p.area)))want.add('Gorumara');
+    if(/jaldapara|madarihat|hollong|holong|salkumar|chilapata|hasimara/.test(n)||ps.some(p=>/Jaldapara|Chilapata/.test(p.area)))want.add('Jaldapara');
+    if(!want.size){want.add('Gorumara');want.add('Jaldapara')}
+    want.forEach(d=>{const t=safariText(d);if(t)out.push(t)});
+  }
+  if(ps.length){S.places=ps.map(p=>p.n);trace('(data)','place data: '+S.places.join(', '))}
+  return out;
+}
+
 function showTyping(){markRead();const ty=document.createElement('div');ty.className='typing';ty.innerHTML='<i></i><i></i><i></i>';chat.appendChild(ty);scrollDown();return ty}
 async function sayNow(text){for(const part of splitBubbles(text)){addMsg(part,'in');await sleep(280)}}
 function mergeState(st){
@@ -565,7 +645,7 @@ function feedbackText(){
   if(S.unans.length)t+='\nBot could not answer:\n'+S.unans.map(q=>`- "${q}"`).join('\n')+'\n';
   return t+'\nMy comment: ';
 }
-function sendFeedback(){window.open('https://wa.me/?text='+encodeURIComponent(feedbackText()),'_blank','noopener')}
+function sendFeedback(){window.open('https://wa.me/'+waNum()+'?text='+encodeURIComponent(feedbackText()),'_blank','noopener')}
 function renderFb(){
   const up=S.fb.filter(f=>f.v>0).length,dn=S.fb.filter(f=>f.v<0);
   $('#p-fb').innerHTML=`<div class="fbstat"><div><b>${up}</b><small>👍 helpful</small></div><div><b>${dn.length}</b><small>👎 not helpful</small></div><div><b>${S.unans.length}</b><small>unanswered</small></div></div>
@@ -598,4 +678,4 @@ async function playDemo(k){
 }
 
 renderSlots();renderLeads();renderKb();renderTrace();renderFb();
-setLang('en');welcome();
+setLang('en');welcome();logEvent({t:'open',ref:(document.referrer||'').slice(0,100)});
